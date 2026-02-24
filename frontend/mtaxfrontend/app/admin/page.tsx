@@ -242,7 +242,7 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-2 gap-6">
           {/* Top Students */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Шилдэг оюутнууд</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Оюутнууд</h3>
             <div className="space-y-3">
               {topStudents.map((student, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
