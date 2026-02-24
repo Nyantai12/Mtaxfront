@@ -14,10 +14,8 @@ import {
 } from "react-icons/fi";
 import { FaUniversity, FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
-import Header from "./component/Header";
-import Footer from "./component/Footer";
-
-
+import Header from "../component/Header";
+import Footer from "../component/Footer";
 
 export default function MandakhHomePage() {
   return (
@@ -76,14 +74,14 @@ export default function MandakhHomePage() {
             {/* CTA Buttons */}
             <div className="flex flex-wrap gap-4">
               <Link 
-                href="/report" 
+                href="/auth" 
                 className="px-8 py-4 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-semibold shadow-xl hover:opacity-95 transition flex items-center gap-2"
               >
                 Эхлэх
                 <FiArrowRight />
               </Link>
               <Link 
-                href="/admin" 
+                href="/about" 
                 className="px-8 py-4 bg-white border border-gray-200 text-gray-700 rounded-xl font-semibold shadow-lg hover:shadow-xl transition flex items-center gap-2"
               >
                 Дэлгэрэнгүй
