@@ -77,7 +77,7 @@ export default function Header() {
               Нэвтрэх
             </Link>
             <Link
-              href="/auth/"
+              href="/company/"
               className="px-5 py-2 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition"
             >
               Бүртгүүлэх
