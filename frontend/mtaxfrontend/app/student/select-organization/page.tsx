@@ -28,7 +28,7 @@ interface ApiResponse {
   data: Organization[];
 }
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "http://localhost:8000";
 
 export default function SelectOrganizationPage() {
   const router = useRouter();
@@ -41,34 +41,67 @@ export default function SelectOrganizationPage() {
   const [success, setSuccess] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
-  // Гарах функц
-  const handleLogout = async () => {
+  
+
+  // Token шинэчлэх функц
+  const refreshToken = async () => {
     try {
-      await fetch(`${API_BASE_URL}/api/auth/logout/`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/token/refresh/`, {
         method: "POST",
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
+
+      if (response.ok) {
+        return true;
+      }
+      return false;
     } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
-      localStorage.clear();
-      router.push("/auth");
+      console.error("Token refresh error:", error);
+      return false;
     }
   };
 
   useEffect(() => {
+    let mounted = true;
+
     async function init() {
-      const result = await checkAuth();
+      try {
+        const result = await checkAuth();
+        
+        if (!mounted) return;
+
         if (!result.isAuthenticated) {
-        router.push("/auth");
-        return;
+          router.push("/auth");
+          return;
+        }
+
+        // Амжилттай нэвтэрсэн бол organizations-ийг ачаална
+        await fetchOrganizations();
+      } catch (error) {
+        console.error("Auth check error:", error);
+        if (mounted) {
+          setError("Нэвтрэх эрх шалгахад алдаа гарлаа");
+        }
+      } finally {
+        if (mounted) {
+          setIsAuthChecking(false);
+        }
       }
     }
-    fetchOrganizations();
-  }, []);
 
-  const fetchOrganizations = async () => {
+    init();
+
+    return () => {
+      mounted = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchOrganizations = async (isRetry = false) => {
     setIsLoading(true);
     setError("");
     
@@ -77,10 +110,9 @@ export default function SelectOrganizationPage() {
       
       const response = await fetch(`${API_BASE_URL}/api/organization/organizationlist/`, {
         method: "GET",
-        credentials: "include", // Cookie автоматаар илгээгдэнэ
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          // Authorization header хэрэггүй, cookie илгээгдэнэ
         },
       });
 
@@ -97,12 +129,29 @@ export default function SelectOrganizationPage() {
       if (data.resultCode === 7220) {
         setOrganizations(data.data || []);
       } else if (data.resultCode === 8213) {
-        console.log("Token error, redirecting to login");
-        setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
-        localStorage.clear();
-        setTimeout(() => {
-          router.push("/auth");
-        }, 2000);
+        // Token expired - token шинэчлэх
+        if (!isRetry) {
+          console.log("Token expired, attempting refresh...");
+          const refreshed = await refreshToken();
+          
+          if (refreshed) {
+            // Token амжилттай шинэчлэгдсэн бол дахин оролдох
+            return fetchOrganizations(true);
+          } else {
+            // Token шинэчлэгдэхгүй бол logout
+            setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
+            localStorage.clear();
+            setTimeout(() => {
+              router.push("/auth");
+            }, 2000);
+          }
+        } else {
+          setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
+          localStorage.clear();
+          setTimeout(() => {
+            router.push("/auth");
+          }, 2000);
+        }
       } else {
         setError(data.resultMessage || "Алдаа гарлаа");
       }
@@ -152,11 +201,20 @@ export default function SelectOrganizationPage() {
         await fetchOrganizations();
         setTimeout(() => setSuccess(""), 3000);
       } else if (data.resultCode === 8213) {
-        setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
-        localStorage.clear();
-        setTimeout(() => {
-          router.push("/auth");
-        }, 2000);
+        // Token expired - token шинэчлэх
+        const refreshed = await refreshToken();
+        
+        if (refreshed) {
+          // Token амжилттай шинэчлэгдсэн бол дахин оролдох
+          setError(""); // Clear error
+          await handleCreateOrganization(e); // Retry
+        } else {
+          setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
+          localStorage.clear();
+          setTimeout(() => {
+            router.push("/auth");
+          }, 2000);
+        }
       } else {
         setError(data.resultMessage || "Алдаа гарлаа");
       }
@@ -182,6 +240,21 @@ export default function SelectOrganizationPage() {
     org.org_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Эхний ачааллалт хийж байгаа эсэхийг шалгах
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
+        <Header />
+        <div className="flex items-center justify-center h-[calc(100vh-80px)]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-600 text-lg">Түр хүлээнэ үү...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
       <Header />
@@ -197,19 +270,13 @@ export default function SelectOrganizationPage() {
           <div className="flex gap-2">
             <button
               onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+              disabled={isRefreshing || isLoading}
+              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition disabled:opacity-50"
               title="Шинэчлэх"
             >
               <FiRefreshCw className={`text-xl ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-              title="Гарах"
-            >
-              <FiLogOut className="text-xl" />
-            </button>
+            
           </div>
         </div>
 
@@ -248,7 +315,8 @@ export default function SelectOrganizationPage() {
           </div>
           <button
             onClick={() => setShowCreateForm(!showCreateForm)}
-            className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2"
+            className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50"
+            disabled={isCreating}
           >
             <FiPlus />
             Шинэ байгууллага
@@ -289,6 +357,7 @@ export default function SelectOrganizationPage() {
                   type="button"
                   onClick={() => setShowCreateForm(false)}
                   className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
+                  disabled={isCreating}
                 >
                   Болих
                 </button>
