@@ -1,393 +1,253 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  FiBriefcase,
-  FiMapPin,
-  FiGlobe,
-  FiPhone,
-  FiMail,
-  FiUser,
-  FiFileText,
-  FiCheckCircle,
-  FiArrowLeft,
   FiPlus,
-  FiX,
-  FiSave,
-  FiEdit2,
-  FiTrash2,
+  FiSearch,
+  FiHome,
+  FiUser,
+  FiChevronRight,
+  FiAlertCircle,
+  FiCheckCircle,
 } from "react-icons/fi";
-import { FaBuilding, FaUniversity } from "react-icons/fa";
-import Link from "next/link";
 import Header from "../component/Header";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-export default function CreateCompanyPage() {
-  const [activeTab, setActiveTab] = useState("create");
-  const [selectedCompany, setSelectedCompany] = useState<number | null>(null);
+interface Organization {
+  org_id: number;
+  org_name: string;
+  created_at: string;
+  report_count?: number;
+}
 
-  // Mock companies data
-  const myCompanies = [
-    {
-      id: 1,
-      name: "Монгол Веб Солюшнс",
-      type: "ХХК",
-      industry: "Мэдээллийн технологи",
-      address: "Улаанбаатар, Сүхбаатар дүүрэг",
-      phone: "+976 99112233",
-      email: "info@mws.mn",
-      website: "www.mws.mn",
-      established: "2025",
-      employees: 15,
-      description: "Вэб хөгжүүлэлт, программ хангамжийн шийдлүүд",
-      isActive: true,
-    },
-    {
-      id: 2,
-      name: "Эко Технологи",
-      type: "ХХК",
-      industry: "Байгаль орчин",
-      address: "Улаанбаатар, Баянзүрх дүүрэг",
-      phone: "+976 99887766",
-      email: "info@eco-tech.mn",
-      website: "www.eco-tech.mn",
-      established: "2024",
-      employees: 8,
-      description: "Байгаль орчны шийдэл, хог хаягдал дахин боловсруулалт",
-      isActive: true,
-    },
-  ];
+export default function SelectOrganizationPage() {
+  const router = useRouter();
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newOrgName, setNewOrgName] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
-  const industries = [
-    "Мэдээллийн технологи",
-    "Банк, Санхүү",
-    "Худалдаа",
-    "Үйлдвэрлэл",
-    "Боловсрол",
-    "Эрүүл мэнд",
-    "Барилга",
-    "Тээвэр, Логистик",
-    "Хөдөө аж ахуй",
-    "Аялал жуулчлал",
-    "Бусад",
-  ];
+  // Хэрэглэгчийн өмнө үүсгэсэн байгууллагуудыг авах
+  useEffect(() => {
+    fetchOrganizations();
+  }, []);
 
-  const companyTypes = ["ХХК", "НҮБ", "ТББ", "Төрийн байгууллага", "Олон улсын байгууллага", "Бусад"];
+  const fetchOrganizations = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("https://bmtax.mandakh.org/api/organizations/", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setOrganizations(data.organizations || []);
+      }
+    } catch (error) {
+      console.error("Error fetching organizations:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Шинэ байгууллага үүсгэх
+  const handleCreateOrganization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOrgName.trim()) {
+      setError("Байгууллагын нэр оруулна уу");
+      return;
+    }
+
+    setIsCreating(true);
+    setError("");
+    
+    try {
+      const refreshToken = localStorage.getItem("refresh_token");
+      const response = await fetch("https://bmtax.mandakh.org/api/organization/addorganization/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ org_name: newOrgName }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.resultCode === 7320) {
+        setSuccess("Байгууллага амжилттай үүсгэгдлээ");
+        setNewOrgName("");
+        setShowCreateForm(false);
+        fetchOrganizations(); // Жагсаалтыг шинэчлэх
+        setTimeout(() => setSuccess(""), 3000);
+      } else {
+        setError(data.resultMessage || "Алдаа гарлаа");
+      }
+    } catch (error) {
+      setError("Серверт холбогдоход алдаа гарлаа");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // Байгууллага сонгоод тайлангийн төрөл сонгох хуудас руу шилжих
+  const handleSelectOrganization = (orgId: number) => {
+    router.push(`/student/reports/new?org_id=${orgId}`);
+  };
+
+  const filteredOrganizations = organizations.filter(org =>
+    org.org_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
       <Header />
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      
+      <div className="max-w-6xl mx-auto px-6 py-12">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Хийсвэр байгууллага үүсгэх</h1>
-            <p className="text-gray-600">Дадлагын тайланд ашиглах байгууллагын мэдээллийг бүртгэнэ</p>
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => setActiveTab("create")}
-              className={`px-4 py-2 rounded-xl font-medium transition flex items-center gap-2 ${
-                activeTab === "create" 
-                  ? "bg-[#0f172a] text-white" 
-                  : "bg-white text-gray-700 border border-gray-200"
-              }`}
-            >
-              <FiPlus /> Шинэ бүртгэл
-            </button>
-            <button
-              onClick={() => setActiveTab("list")}
-              className={`px-4 py-2 rounded-xl font-medium transition flex items-center gap-2 ${
-                activeTab === "list" 
-                  ? "bg-[#0f172a] text-white" 
-                  : "bg-white text-gray-700 border border-gray-200"
-              }`}
-            >
-              <FiBriefcase /> Миний байгууллагууд
-            </button>
-          </div>
+        <div className="text-center mb-12">
+          <h1 className="text-3xl font-bold text-gray-900">Тайлан илгээх</h1>
+          <p className="text-gray-600 mt-2">
+            Эхлээд байгууллагаа сонгох эсвэл шинээр үүсгэнэ үү
+          </p>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === "create" ? (
-          <div className="grid lg:grid-cols-2 gap-8">
-            {/* Left Column - Form */}
-            <div className="lg:col-span-1">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="bg-white rounded-2xl p-6 shadow-xl border border-gray-200"
-              >
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <FaBuilding className="text-blue-600" />
-                  Байгууллагын мэдээлэл
-                </h3>
+        {/* Success/Error Messages */}
+        {success && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3 text-green-700"
+          >
+            <FiCheckCircle className="text-xl" />
+            <span>{success}</span>
+          </motion.div>
+        )}
 
-                <div className="space-y-4">
-                  {/* Company Name - only this field is required as per request */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Байгууллагын нэр <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Жишээ: Монгол Веб Солюшнс ХХК"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Та зөвхөн нэрээр бүртгэж болно</p>
-                  </div>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700"
+          >
+            <FiAlertCircle className="text-xl" />
+            <span>{error}</span>
+          </motion.div>
+        )}
 
-                  {/* Optional fields - but visually shown */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Байгууллагын төрөл</label>
-                      <select className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-400">
-                        <option value="">Сонгох (optional)</option>
-                        {companyTypes.map((type, index) => (
-                          <option key={index} value={type}>{type}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Салбар</label>
-                      <select className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white text-gray-400">
-                        <option value="">Сонгох (optional)</option>
-                        {industries.map((industry, index) => (
-                          <option key={index} value={industry}>{industry}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+        {/* Actions */}
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
+          <div className="flex-1 relative">
+            <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Байгууллага хайх..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+            />
+          </div>
+          <button
+            onClick={() => setShowCreateForm(!showCreateForm)}
+            className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2"
+          >
+            <FiPlus />
+            Шинэ байгууллага
+          </button>
+        </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      <FiMapPin className="inline mr-1" /> Хаяг
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Байгууллагын хаяг (optional)"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
+        {/* Create New Organization Form */}
+        {showCreateForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="mb-8 p-6 bg-white rounded-2xl shadow-xl border border-gray-200"
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Шинэ байгууллага үүсгэх</h3>
+            <form onSubmit={handleCreateOrganization} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Байгууллагын нэр <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newOrgName}
+                  onChange={(e) => setNewOrgName(e.target.value)}
+                  placeholder="Жишээ: Мандах ХХК, Глобал Солюшнс ..."
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  disabled={isCreating}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition disabled:opacity-50"
+                >
+                  {isCreating ? "Үүсгэж байна..." : "Байгууллага үүсгэх"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateForm(false)}
+                  className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
+                >
+                  Болих
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        )}
 
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        <FiPhone className="inline mr-1" /> Утас
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Утасны дугаар (optional)"
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        <FiMail className="inline mr-1" /> И-мэйл
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="info@company.mn (optional)"
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      <FiGlobe className="inline mr-1" /> Вэбсайт
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="www.company.mn (optional)"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Товч танилцуулга</label>
-                    <textarea
-                      rows={3}
-                      placeholder="Байгууллагын үйл ажиллагааны товч танилцуулга (optional)"
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                    />
-                  </div>
-
-                  {/* Submit Buttons */}
-                  <div className="flex gap-3 pt-4">
-                    <button className="flex-1 px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-semibold shadow-lg hover:opacity-90 transition flex items-center justify-center gap-2">
-                      <FiSave />
-                      Бүртгэх
-                    </button>
-                    <button className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition">
-                      Цэвэрлэх
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Right Column - Info & Tips */}
-            <div className="lg:col-span-1">
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="space-y-6"
-              >
-                {/* Info Card */}
-                <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-6 shadow-xl text-white">
-                  <FaBuilding className="text-4xl mb-4 opacity-80" />
-                  <h3 className="text-xl font-bold mb-2">Хийсвэр байгууллага гэж юу вэ?</h3>
-                  <p className="text-blue-100 mb-4">
-                    Хийсвэр байгууллага гэдэг нь оюутнууд дадлагын тайлангаа бичихдээ 
-                    ашиглах зориулалттай, бодит бус байгууллага юм. Та өөрийн сонирхолын 
-                    дагуу ямар ч нэртэй байгууллага үүсгэж болно.
-                  </p>
-                  <div className="border-t border-blue-400/30 pt-4">
-                    <p className="text-sm text-blue-200">
-                      <span className="font-semibold">Жишээ нь:</span> "Монгол Веб Солюшнс", 
-                      "Эко Технологи", "Дижитал Эйжнси" гэх мэт
-                    </p>
-                  </div>
-                </div>
-
-                {/* Tips Card */}
-                <div className="bg-white rounded-2xl p-6 shadow-xl border border-gray-200">
-                  <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                    <FiCheckCircle className="text-green-500" />
-                    Зөвлөмж
-                  </h3>
-                  <ul className="space-y-2 text-sm text-gray-600">
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">•</span>
-                      <span>Зөвхөн нэрээр бүртгэх боломжтой</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">•</span>
-                      <span>Бусад мэдээллийг нэмэлтээр бөглөж болно</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">•</span>
-                      <span>Нэг оюутан олон байгууллага үүсгэх боломжтой</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500">•</span>
-                      <span>Үүсгэсэн байгууллагаа дараа засах, устгах боломжтой</span>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Example Card */}
-                <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
-                  <h3 className="font-semibold text-gray-900 mb-3">Жишээ бүртгэл</h3>
-                  <div className="space-y-2">
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Байгууллагын нэр:</span> 
-                      <span className="text-gray-600 ml-2">Монгол Веб Солюшнс ХХК</span>
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Салбар:</span> 
-                      <span className="text-gray-600 ml-2">Мэдээллийн технологи</span>
-                    </p>
-                    <p className="text-sm">
-                      <span className="font-medium text-gray-700">Үйл ажиллагаа:</span> 
-                      <span className="text-gray-600 ml-2">Вэб хөгжүүлэлт, программ хангамж</span>
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
+        {/* Organizations List */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-600">Түр хүлээнэ үү...</p>
           </div>
         ) : (
-          /* My Companies List Tab */
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-white rounded-2xl p-6 shadow-xl border border-gray-200"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Миний бүртгэсэн байгууллагууд</h3>
-              <span className="text-sm text-gray-500">Нийт {myCompanies.length} байгууллага</span>
-            </div>
-
-            <div className="space-y-4">
-              {myCompanies.map((company) => (
-                <div
-                  key={company.id}
-                  className={`border rounded-xl p-5 transition cursor-pointer ${
-                    selectedCompany === company.id
-                      ? "border-blue-500 bg-blue-50/50"
-                      : "border-gray-200 hover:border-blue-300 hover:bg-gray-50"
-                  }`}
-                  onClick={() => setSelectedCompany(company.id)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-[#0f172a] to-[#1e3a8a] rounded-xl flex items-center justify-center text-white text-xl font-bold">
-                        {company.name.charAt(0)}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{company.name}</h4>
-                        <p className="text-sm text-gray-600">{company.industry} · {company.type}</p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <FiMapPin /> {company.address}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <FiPhone /> {company.phone}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button className="p-2 hover:bg-white rounded-lg transition text-blue-600">
-                        <FiEdit2 />
-                      </button>
-                      <button className="p-2 hover:bg-white rounded-lg transition text-red-600">
-                        <FiTrash2 />
-                      </button>
-                    </div>
-                  </div>
-
-                  {selectedCompany === company.id && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="mt-4 pt-4 border-t border-blue-200"
-                    >
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-500">И-мэйл</p>
-                          <p className="font-medium">{company.email}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Вэбсайт</p>
-                          <p className="font-medium text-blue-600">{company.website}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Байгуулагдсан</p>
-                          <p className="font-medium">{company.established} он</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-500">Ажилчдын тоо</p>
-                          <p className="font-medium">{company.employees}</p>
-                        </div>
-                      </div>
-                      <p className="mt-3 text-sm text-gray-700">{company.description}</p>
-                    </motion.div>
-                  )}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredOrganizations.map((org) => (
+              <motion.div
+                key={org.org_id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.02 }}
+                onClick={() => handleSelectOrganization(org.org_id)}
+                className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 cursor-pointer hover:shadow-2xl transition"
+              >
+                <div className="w-14 h-14 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
+                  <FiHome className="text-blue-700 text-2xl" />
                 </div>
-              ))}
-            </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">{org.org_name}</h3>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-500">
+                    {org.report_count || 0} тайлан
+                  </div>
+                  <FiChevronRight className="text-blue-600" />
+                </div>
+              </motion.div>
+            ))}
 
-            <div className="mt-6 text-center text-sm text-gray-500">
-              <FiFileText className="inline mr-1" /> Нийт 2 байгууллага бүртгэгдсэн
-            </div>
-          </motion.div>
+            {filteredOrganizations.length === 0 && (
+              <div className="col-span-full text-center py-12">
+                <FiHome className="text-6xl text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">Байгууллага олдсонгүй</p>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  + Шинэ байгууллага үүсгэх
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

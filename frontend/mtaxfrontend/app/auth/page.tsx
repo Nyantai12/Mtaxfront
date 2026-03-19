@@ -12,6 +12,17 @@ import {
 } from "react-icons/fi";
 import { FaGraduationCap } from "react-icons/fa";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+
+// Session интерфейс
+interface UserData {
+  id: number;
+  email: string;
+  user_role: string;
+  first_name: string;
+  last_name: string;
+}
 
 export default function MandakhAuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -31,6 +42,38 @@ export default function MandakhAuthPage() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     setError("");
+  };
+
+  // Session хадгалах функц
+  const saveSession = (userData: UserData) => {
+    try {
+      // Хэрэглэгчийн мэдээллийг хадгалах
+      localStorage.setItem("user", JSON.stringify(userData));
+      
+      // Хэрэглэгчийн роль хадгалах
+      if (userData.user_role) {
+        localStorage.setItem("userRole", userData.user_role);
+      }
+      
+      // Хэрэглэгчийн ID хадгалах
+      if (userData.id) {
+        localStorage.setItem("userId", userData.id.toString());
+      }
+      
+      // Session token (хэрэв байгаа бол)
+      // localStorage.setItem("token", "dummy-token");
+      
+      // Session-ийг бусад компонентууд мэдэхийн тулд custom event dispatch
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('auth-change'));
+      }
+      
+      console.log("Session saved successfully:", userData);
+      return true;
+    } catch (error) {
+      console.error("Error saving session:", error);
+      return false;
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,7 +99,7 @@ export default function MandakhAuthPage() {
       ? "https://bmtax.mandakh.org/api/auth/login/"
       : "https://bmtax.mandakh.org/api/auth/register/";
 
-    // Prepare request body (backend expects JSON)
+    // Prepare request body
     const requestBody = isLogin
       ? {
           email: formData.email,
@@ -74,47 +117,62 @@ export default function MandakhAuthPage() {
       console.log("Request body:", requestBody);
 
       const response = await fetch(apiUrl, {
-        method: "POST", // The API expects POST method
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
       });
 
-      // Try to parse the response as JSON
+      // Log response status
+      console.log("Response status:", response.status);
+
+      // Get response text
+      const responseText = await response.text();
+      console.log("Raw response:", responseText);
+
+      // Parse as JSON
       let data;
       try {
-        data = await response.json();
+        data = JSON.parse(responseText);
+        console.log("Parsed data:", data);
       } catch (e) {
-        // If response is not JSON, get text
-        const text = await response.text();
-        throw new Error(`Серверээс буруу хариу ирлээ: ${text.substring(0, 100)}`);
+        console.error("Failed to parse JSON:", e);
+        throw new Error(`Серверээс JSON хариу ирсэнгүй: ${responseText.substring(0, 100)}`);
       }
 
-      console.log("Response data:", data);
-
-      // Check if the request was successful based on HTTP status
+      // Check if response was successful
       if (!response.ok) {
-        // Handle different error formats
-        const errorMessage = data.resultMessage || data.message || `Алдаа: ${response.status}`;
+        const errorMessage = 
+          data.resultMessage || 
+          data.message || 
+          data.error || 
+          data.detail ||
+          `Алдаа (${response.status})`;
         throw new Error(errorMessage);
       }
 
-      // Check business logic success (customize based on actual API response)
-      // If resultCode is 0 or 200, or if there's a success flag
-      if (data.resultCode === 0 || data.resultCode === 200 || data.success === true) {
-        // Save token if returned
-        if (data.token) {
-          localStorage.setItem("token", data.token);
+      // Check resultCode for success (8110 амжилттай гэсэн үг)
+      if (data.resultCode === 8110 || data.resultCode === 0 || data.resultCode === 200) {
+        
+        // Хэрэглэгчийн мэдээллийг хадгалах
+        if (data.data && data.data.length > 0) {
+          const userData = data.data[0]; // Эхний хэрэглэчийн мэдээллийг авах
+          
+          // Session хадгалах
+          const sessionSaved = saveSession(userData);
+          
+          if (sessionSaved) {
+            // Амжилттай бол  руу шилжих
+            router.push("/");
+          } else {
+            throw new Error("Session хадгалахад алдаа гарлаа");
+          }
+        } else {
+          throw new Error("Хэрэглэгчийн мэдээлэл олдсонгүй");
         }
-        if (data.user) {
-          localStorage.setItem("user", JSON.stringify(data.user));
-        }
-
-        // Redirect to home page
-        router.push("/");
       } else {
-        // Handle business logic errors
+        // Бусад resultCode ирвэл алдаа гэж үзэх
         throw new Error(data.resultMessage || "Үл мэдэгдэх алдаа гарлаа");
       }
 
@@ -141,12 +199,19 @@ export default function MandakhAuthPage() {
       >
         <div className="grid lg:grid-cols-5 bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-gray-200">
 
-          {/* LEFT BRAND PANEL - unchanged */}
+          {/* LEFT BRAND PANEL */}
           <div className="lg:col-span-2 bg-gradient-to-br from-[#0f172a] to-[#1e3a8a] p-12 text-white relative">
-            {/* ... (logo, title, features remain the same) ... */}
             <div className="flex items-center gap-3 mb-12">
               <div className="w-20 h-20 bg-white/10 rounded-2xl flex items-center justify-center border border-white/20">
-                <img src="images/logomandah.png" alt="Mandakh University Logo" className="w-15 h-15 object-contain" />
+                <div className="relative w-15 h-15">
+                  <Image 
+                    src="/images/logomandah.png" 
+                    alt="Mandakh University Logo" 
+                    width={60}
+                    height={60}
+                    className="object-contain"
+                  />
+                </div>
               </div>
               <div>
                 <h2 className="text-xl font-bold tracking-wide">
@@ -195,6 +260,7 @@ export default function MandakhAuthPage() {
               {/* Toggle Buttons */}
               <div className="flex bg-gray-100 rounded-2xl p-1 mb-10">
                 <button
+                  type="button"
                   onClick={() => {
                     setIsLogin(true);
                     setError("");
@@ -208,6 +274,7 @@ export default function MandakhAuthPage() {
                   Нэвтрэх
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setIsLogin(false);
                     setError("");
@@ -377,14 +444,14 @@ export default function MandakhAuthPage() {
 
               </form>
 
-              {/* API Connection Status */}
+              {/* Home Link */}
               <div className="mt-6 text-center">
-                <p className="text-xs text-gray-400">
-                  {isLoading ? "Серверт холбогдож байна..." : "✅ Сервер холбогдсон"}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {isLogin ? "https://bmtax.mandakh.org/api/auth/login/" : "https://bmtax.mandakh.org/api/auth/register/"}
-                </p>
+                <Link 
+                  href="/" 
+                  className="text-sm text-gray-500 hover:text-gray-700 transition"
+                >
+                  ← Нүүр хуудас руу буцах
+                </Link>
               </div>
 
               {/* Footer */}
