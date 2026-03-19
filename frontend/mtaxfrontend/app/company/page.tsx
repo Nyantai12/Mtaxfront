@@ -42,7 +42,7 @@ export default function SelectOrganizationPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("https://bmtax.mandakh.org/api/organizations/", {
+      const response = await fetch("https://bmtax.mandakh.org/api/organization/organizationlist/", {
         headers: {
           "Authorization": `Bearer ${token}`,
         },
