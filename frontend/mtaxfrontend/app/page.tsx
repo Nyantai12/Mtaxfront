@@ -76,7 +76,7 @@ export default function MandakhHomePage() {
             {/* CTA Buttons */}
             <div className="flex flex-wrap gap-4">
               <Link 
-                href="/report/" 
+                href="/student/select-organization/" 
                 className="px-8 py-4 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-semibold shadow-xl hover:opacity-95 transition flex items-center gap-2"
               >
                 Эхлэх

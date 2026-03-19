@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { checkAuth } from "../../authcheck/page";
 import {
   FiPlus,
   FiSearch,
@@ -12,7 +13,7 @@ import {
   FiRefreshCw,
   FiLogOut,
 } from "react-icons/fi";
-import Header from "../component/Header";
+import Header from "../../component/Header";
 import { useRouter } from "next/navigation";
 
 interface Organization {
@@ -26,6 +27,8 @@ interface ApiResponse {
   resultMessage: string;
   data: Organization[];
 }
+
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 export default function SelectOrganizationPage() {
   const router = useRouter();
@@ -42,7 +45,7 @@ export default function SelectOrganizationPage() {
   // Гарах функц
   const handleLogout = async () => {
     try {
-      await fetch("https://bmtax.mandakh.org/api/auth/logout/", {
+      await fetch(`${API_BASE_URL}/api/auth/logout/`, {
         method: "POST",
         credentials: "include",
       });
@@ -50,38 +53,41 @@ export default function SelectOrganizationPage() {
       console.error("Logout error:", error);
     } finally {
       localStorage.clear();
-      document.cookie.split(";").forEach(function(c) {
-        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=; expires=" + new Date().toUTCString() + "; path=/");
-      });
       router.push("/auth");
     }
   };
 
   useEffect(() => {
-    const userData = localStorage.getItem("user");
-    if (!userData) {
-      router.push("/auth");
-      return;
+    async function init() {
+      const result = await checkAuth();
+        if (!result.isAuthenticated) {
+        router.push("/auth");
+        return;
+      }
     }
     fetchOrganizations();
   }, []);
 
-  const fetchOrganizations = async (isRetry = false) => {
+  const fetchOrganizations = async () => {
     setIsLoading(true);
     setError("");
     
     try {
-      const response = await fetch("https://bmtax.mandakh.org/api/organization/organizationlist/", {
+      console.log("Fetching organizations with cookies");
+      
+      const response = await fetch(`${API_BASE_URL}/api/organization/organizationlist/`, {
         method: "GET",
-        credentials: "include",
+        credentials: "include", // Cookie автоматаар илгээгдэнэ
         headers: {
           "Content-Type": "application/json",
+          // Authorization header хэрэггүй, cookie илгээгдэнэ
         },
       });
 
       const responseText = await response.text();
-      let data: ApiResponse;
+      console.log("Organizations response:", responseText);
       
+      let data: ApiResponse;
       try {
         data = JSON.parse(responseText);
       } catch (e) {
@@ -90,14 +96,18 @@ export default function SelectOrganizationPage() {
 
       if (data.resultCode === 7220) {
         setOrganizations(data.data || []);
-      } else if (data.resultCode === 8213 && !isRetry) {
-        // Токен алдаа гарвал нэвтрэх хуудас руу шилжих
+      } else if (data.resultCode === 8213) {
+        console.log("Token error, redirecting to login");
+        setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
         localStorage.clear();
-        router.push("/auth");
+        setTimeout(() => {
+          router.push("/auth");
+        }, 2000);
       } else {
         setError(data.resultMessage || "Алдаа гарлаа");
       }
     } catch (error) {
+      console.error("Fetch error:", error);
       setError("Серверт холбогдоход алдаа гарлаа");
     } finally {
       setIsLoading(false);
@@ -116,7 +126,7 @@ export default function SelectOrganizationPage() {
     setError("");
     
     try {
-      const response = await fetch("https://bmtax.mandakh.org/api/organization/addorganization/", {
+      const response = await fetch(`${API_BASE_URL}/api/organization/addorganization/`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -126,6 +136,8 @@ export default function SelectOrganizationPage() {
       });
 
       const responseText = await response.text();
+      console.log("Create response:", responseText);
+      
       let data;
       try {
         data = JSON.parse(responseText);
@@ -140,12 +152,16 @@ export default function SelectOrganizationPage() {
         await fetchOrganizations();
         setTimeout(() => setSuccess(""), 3000);
       } else if (data.resultCode === 8213) {
+        setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
         localStorage.clear();
-        router.push("/auth");
+        setTimeout(() => {
+          router.push("/auth");
+        }, 2000);
       } else {
         setError(data.resultMessage || "Алдаа гарлаа");
       }
     } catch (error) {
+      console.error("Create error:", error);
       setError("Серверт холбогдоход алдаа гарлаа");
     } finally {
       setIsCreating(false);
@@ -313,7 +329,7 @@ export default function SelectOrganizationPage() {
             ) : (
               <div className="col-span-full text-center py-12">
                 <FiHome className="text-6xl text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">Байгууллага олдсонгүй</p>
+                <p className="text-gray-500 mb-4">Танд одоогоор байгууллага байхгүй байна</p>
                 <button
                   onClick={() => setShowCreateForm(true)}
                   className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition inline-flex items-center gap-2"
