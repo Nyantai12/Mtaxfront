@@ -36,7 +36,7 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-sm text-gray-600">
               <li>
-                <Link href="/student/profile" className="hover:text-gray-900 transition">
+                <Link href="/admin/" className="hover:text-gray-900 transition">
                   Бидний тухай
                 </Link>
               </li>
