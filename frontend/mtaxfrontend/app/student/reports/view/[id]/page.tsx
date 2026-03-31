@@ -1,7 +1,7 @@
 // app/student/tax-report/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiSave,
@@ -20,7 +20,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/app/component/Header";
 
-// Интерфейсүүд
 interface Field {
   id: string;
   type: string;
@@ -33,8 +32,8 @@ interface Field {
 }
 
 interface Section {
+  title: ReactNode;
   id: string;
-  title: string;
   fields: Field[];
   columns?: any[];
 }
@@ -247,6 +246,30 @@ const reportStructure: ReportData = {
   ],
 };
 
+const formatAsMoney = (value: string | number): string => {
+  if (value === "" || value === undefined || value === null) return "0.00 ₮";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(num)) return "0.00 ₮";
+  const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${formatted} ₮`;
+};
+
+const parseInputValue = (value: string): string => {
+  if (!value) return "";
+  let cleanValue = value.replace(/,/g, "");
+  cleanValue = cleanValue.replace(/[^0-9.-]/g, "");
+  const dotCount = (cleanValue.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    const firstDotIndex = cleanValue.indexOf(".");
+    cleanValue =
+      cleanValue.substring(0, firstDotIndex + 1) +
+      cleanValue.substring(firstDotIndex + 1).replace(/\./g, "");
+  }
+  const num = parseFloat(cleanValue);
+  if (isNaN(num)) return "";
+  return num.toString();
+};
+
 export default function TaxReportPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -256,18 +279,18 @@ export default function TaxReportPage() {
   const [showTeacherList, setShowTeacherList] = useState(false);
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(true);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
-  
-  // Хэрэглэгчийн мэдээлэл
-  const [studentInfo, setStudentInfo] = useState({
-    id: "",
-    name: "",
-  });
 
-  // Багш нарын жагсаалт
+  const recalculateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const inputFocusRef = useRef<{ [key: string]: boolean }>({});
+  const tempInputValueRef = useRef<{ [key: string]: string }>({});
+
+  // ✅ ШИНЭ: report_id-г ref-д хадгалах — stale closure-оос сэргийлнэ
+  const reportIdRef = useRef<number | undefined>(undefined);
+
+  const [studentInfo, setStudentInfo] = useState({ id: "", name: "" });
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
 
-  // Формын өгөгдөл
   const [formData, setFormData] = useState<FormData>({
     student_id: "",
     report_type_id: 1,
@@ -280,8 +303,12 @@ export default function TaxReportPage() {
     report_name: "",
   });
 
+  // ✅ formData.report_id өөрчлөгдөх бүрт ref-г шинэчлэх
   useEffect(() => {
-    // Хэрэглэгчийн мэдээллийг авах
+    reportIdRef.current = formData.report_id;
+  }, [formData.report_id]);
+
+  useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
       const userData = JSON.parse(user);
@@ -289,133 +316,103 @@ export default function TaxReportPage() {
         id: userData.id?.toString() || "",
         name: `${userData.last_name || ""} ${userData.first_name || ""}`,
       });
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         student_id: userData.id?.toString() || "",
       }));
     }
 
-    // Багш нарын жагсаалтыг татах
     fetchTeachers();
 
-    // URL-аас report ID шалгах
     const urlParams = new URLSearchParams(window.location.search);
-    const reportId = urlParams.get('id');
+    const reportId = urlParams.get("id");
     if (reportId) {
       fetchReportData(parseInt(reportId));
     } else {
-      // Шинэ тайлан бол анхны утгуудыг тохируулах
       initializeValues();
     }
   }, []);
 
-  // app/student/tax-report/page.tsx - fetchReportData функцийг шинэчлэх
+  const fetchReportData = async (reportId: number) => {
+    setIsLoadingReport(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8000/api/report/${reportId}/`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
-// Одoo байгаа тайлангийн мэдээллийг татах (GET /api/report/<rid>/)
-const fetchReportData = async (reportId: number) => {
-  setIsLoadingReport(true);
-  try {
-    const response = await fetch(`http://localhost:8000/api/report/${reportId}/`, {
-      method: "GET",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+      const data = await response.json();
+      console.log("Тайлангийн мэдээлэл:", data);
 
-    const data = await response.json();
-    console.log("Тайлангийн мэдээлэл:", data);
-    
-    if (data.resultCode === 7520 && data.data) {
-      const report = data.data;
-      
-      let reportValues = {};
-      
-      if (report.report_data) {
-        if (typeof report.report_data === 'object') {
-          reportValues = report.report_data;
-        } 
-        else if (typeof report.report_data === 'string') {
-          try {
-            reportValues = JSON.parse(report.report_data);
-          } catch (e) {
-            console.error("JSON parse error:", e);
-            reportValues = {};
+      if (data.resultCode === 7520 && data.data) {
+        const report = data.data;
+        let reportValues: Record<string, string> = {};
+
+        if (report.report_data) {
+          if (typeof report.report_data === "object") {
+            reportValues = report.report_data;
+          } else if (typeof report.report_data === "string") {
+            try {
+              reportValues = JSON.parse(report.report_data);
+            } catch (e) {
+              console.error("JSON parse error:", e);
+            }
           }
         }
-      }
-      
-      // Хадгалсан утгуудыг авах - дутуу талбаруудыг undefined хэвээр үлдээх
-      // 0.00 гэж тохируулахгүй
-      const existingValues = { ...reportValues };
-      
-      // Тайлангийн өгөгдлийг formData-д тохируулах
-      setFormData({
-        student_id: formData.student_id,
-        report_type_id: formData.report_type_id,
-        tax_period_year: formData.tax_period_year,
-        tax_period_month: formData.tax_period_month,
-        values: existingValues, // Хадгалсан утгуудыг шууд ашиглах
-        teacher_id: undefined,
-        report_id: report.report_id,
-        is_draft: true,
-        report_name: report.type_name || "",
-      });
 
-      // Тооцооллыг дахин хийх
-      setTimeout(() => recalculateAll(), 100);
-    } else {
+        // ✅ report_id-г ref-д шууд хадгалах
+        reportIdRef.current = report.report_id;
+
+        setFormData((prev) => ({
+          ...prev,
+          values: { ...reportValues },
+          report_id: report.report_id,
+          is_draft: true,
+          report_name: report.type_name || "",
+        }));
+
+        setTimeout(() => recalculateAll(), 100);
+      } else {
+        initializeValues();
+      }
+    } catch (error) {
+      console.error("Тайлангийн мэдээлэл татахад алдаа:", error);
       initializeValues();
+    } finally {
+      setIsLoadingReport(false);
     }
-  } catch (error) {
-    console.error("Тайлангийн мэдээлэл татахад алдаа:", error);
-    initializeValues();
-  } finally {
-    setIsLoadingReport(false);
-  }
-};
-
-  // Анхны утгуудыг тохируулах
-  const initializeValues = () => {
-    const initialValues: Record<string, string> = {};
-    
-    const setInitialValues = (fields: Field[]) => {
-      for (const field of fields) {
-        if (!field.isCalculated) {
-          initialValues[field.id] = "0.00";
-        }
-        if (field.children?.length) {
-          setInitialValues(field.children);
-        }
-      }
-    };
-    
-    setInitialValues(reportStructure.sections.flatMap(s => s.fields));
-    
-    setFormData(prev => ({
-      ...prev,
-      values: initialValues,
-    }));
   };
 
-  // Багш нарын жагсаалт татах
+  const initializeValues = () => {
+    const initialValues: Record<string, string> = {};
+    const setInitialValues = (fields: Field[]) => {
+      for (const field of fields) {
+        if (!field.isCalculated) initialValues[field.id] = "";
+        if (field.children?.length) setInitialValues(field.children);
+      }
+    };
+    setInitialValues(reportStructure.sections.flatMap((s) => s.fields));
+    setFormData((prev) => ({ ...prev, values: initialValues }));
+  };
+
   const fetchTeachers = async () => {
     setIsLoadingTeachers(true);
     try {
-      const response = await fetch("http://localhost:8000/api/users/teachers/", {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
+      const response = await fetch(
+        "http://localhost:8000/api/users/teachers/",
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
       const data = await response.json();
-      
       if (data.resultCode === 7920 && data.data) {
         setTeachers(data.data);
-      } else {
-        console.error("Багш нар татахад алдаа:", data.resultMessage);
       }
     } catch (error) {
       console.error("Багш нар татахад алдаа:", error);
@@ -424,290 +421,372 @@ const fetchReportData = async (reportId: number) => {
     }
   };
 
-  // Талбарын утгыг авах
-  const getValue = (fieldId: string): number => {
-    return Number(formData.values[fieldId] || 0);
-  };
+  const getValue = useCallback(
+    (fieldId: string): number => {
+      const value = formData.values[fieldId];
+      if (value === undefined || value === null || value === "") return 0;
+      const num = Number(value);
+      return isNaN(num) ? 0 : num;
+    },
+    [formData.values]
+  );
 
-  // Томьёог бодох
-  const evaluateRule = (rule?: string): number => {
-    if (!rule) return 0;
-    
-    let expression = rule;
-    
-    // Хувиар бодох (10%, 5%, 2%, 40% гэх мэт)
-    expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (match, p1) => {
-      return `(${parseFloat(p1) / 100})`;
-    });
-    
-    // Талбарын ID-г утгаар солих
-    expression = expression.replace(/\b(\d+)\b/g, (match) => {
-      return getValue(match).toString();
-    });
-    
-    try {
-      const result = Function('"use strict"; return (' + expression + ')')();
-      return isNaN(result) ? 0 : result;
-    } catch (error) {
-      console.error('Томьёо бодоход алдаа гарлаа:', rule, error);
-      return 0;
-    }
-  };
+  const getDisplayValue = useCallback(
+    (fieldId: string): string => {
+      if (
+        inputFocusRef.current[fieldId] &&
+        tempInputValueRef.current[fieldId] !== undefined
+      ) {
+        return tempInputValueRef.current[fieldId];
+      }
+      if (inputFocusRef.current[fieldId]) {
+        const rawValue = formData.values[fieldId];
+        return rawValue === undefined || rawValue === null || rawValue === ""
+          ? ""
+          : rawValue;
+      }
+      const value = formData.values[fieldId];
+      if (value === undefined || value === null || value === "")
+        return "0.00 ₮";
+      return formatAsMoney(value);
+    },
+    [formData.values]
+  );
 
-  // Бүх утгыг дахин тооцоолох
-  const recalculateAll = () => {
-    const newValues = { ...formData.values };
-    
-    const calculatedFields: Field[] = [];
-    
-    const collectCalculatedFields = (fields: Field[]) => {
-      fields.sort((a, b) => a.order - b.order);
-      for (const field of fields) {
-        if (field.isCalculated && field.calculationRule) {
-          calculatedFields.push(field);
+  const evaluateRule = useCallback(
+    (rule?: string): number => {
+      if (!rule) return 0;
+      let expression = rule;
+      expression = expression.replace(/(\d+(?:\.\d+)?)%/g, (_, p1) => {
+        return `(${parseFloat(p1) / 100})`;
+      });
+      expression = expression.replace(/\b(\d+)\b/g, (match) => {
+        return getValue(match).toString();
+      });
+      try {
+        const result = Function('"use strict"; return (' + expression + ")")();
+        return isNaN(result) ? 0 : result;
+      } catch (error) {
+        console.error("Томьёо бодоход алдаа:", rule, error);
+        return 0;
+      }
+    },
+    [getValue]
+  );
+
+  const recalculateAll = useCallback(() => {
+    setFormData((prev) => {
+      const newValues = { ...prev.values };
+      const calculatedFields: Field[] = [];
+      const collectCalculatedFields = (fields: Field[]) => {
+        fields.sort((a, b) => a.order - b.order);
+        for (const field of fields) {
+          if (field.isCalculated && field.calculationRule)
+            calculatedFields.push(field);
+          if (field.children?.length) collectCalculatedFields(field.children);
         }
-        if (field.children?.length) {
-          collectCalculatedFields(field.children);
+      };
+      collectCalculatedFields(
+        reportStructure.sections.flatMap((s) => s.fields)
+      );
+      for (let i = 0; i < 5; i++) {
+        for (const field of calculatedFields) {
+          if (field.calculationRule) {
+            const result = evaluateRule(field.calculationRule);
+            if (newValues[field.id] !== result.toString()) {
+              newValues[field.id] = result.toString();
+            }
+          }
         }
       }
-    };
-    
-    collectCalculatedFields(reportStructure.sections.flatMap(s => s.fields));
-    
-    for (let i = 0; i < 5; i++) {
-      for (const field of calculatedFields) {
-        const result = evaluateRule(field.calculationRule);
-        newValues[field.id] = result.toFixed(2);
+      return { ...prev, values: newValues };
+    });
+  }, [evaluateRule]);
+
+  const handleFocus = useCallback((fieldId: string) => {
+    inputFocusRef.current[fieldId] = true;
+    tempInputValueRef.current[fieldId] = "";
+    setFormData((prev) => ({ ...prev }));
+  }, []);
+
+  const handleBlur = useCallback(
+    (fieldId: string) => {
+      inputFocusRef.current[fieldId] = false;
+      delete tempInputValueRef.current[fieldId];
+      const currentValue = formData.values[fieldId];
+      if (currentValue && currentValue !== "") {
+        const num = parseFloat(currentValue);
+        if (!isNaN(num)) {
+          setFormData((prev) => ({
+            ...prev,
+            values: { ...prev.values, [fieldId]: num.toString() },
+          }));
+        }
       }
-    }
-    
-    setFormData(prev => ({
-      ...prev,
-      values: newValues,
-    }));
-  };
+      setFormData((prev) => ({ ...prev }));
+    },
+    [formData.values]
+  );
 
-  // Input өөрчлөгдөхөд
-  const handleInputChange = (fieldId: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      values: {
-        ...prev.values,
-        [fieldId]: value,
-      },
-    }));
-    setTimeout(() => recalculateAll(), 0);
-  };
+  const handleInputChange = useCallback(
+    (fieldId: string, displayValue: string) => {
+      tempInputValueRef.current[fieldId] = displayValue;
+      const cleanValue = parseInputValue(displayValue);
+      setFormData((prev) => ({
+        ...prev,
+        values: { ...prev.values, [fieldId]: cleanValue },
+      }));
+      if (recalculateTimeoutRef.current)
+        clearTimeout(recalculateTimeoutRef.current);
+      recalculateTimeoutRef.current = setTimeout(() => recalculateAll(), 100);
+    },
+    [recalculateAll]
+  );
 
-  // Бүх утгыг 0 болгох
   const resetAllValues = () => {
     const newValues: Record<string, string> = {};
-    
     const resetFields = (fields: Field[]) => {
       for (const field of fields) {
-        if (!field.isCalculated) {
-          newValues[field.id] = "0.00";
-        }
-        if (field.children?.length) {
-          resetFields(field.children);
-        }
+        if (!field.isCalculated) newValues[field.id] = "";
+        if (field.children?.length) resetFields(field.children);
       }
     };
-    
-    resetFields(reportStructure.sections.flatMap(s => s.fields));
-    
-    setFormData(prev => ({
-      ...prev,
-      values: newValues,
-    }));
-    
+    resetFields(reportStructure.sections.flatMap((s) => s.fields));
+    setFormData((prev) => ({ ...prev, values: newValues }));
     setTimeout(() => recalculateAll(), 0);
   };
 
-  // app/student/tax-report/page.tsx - saveReport функцийг шинэчлэх
-
-// Тайлан хадгалах (дутуу бөглөсөн ч хадгалах)
-const saveReport = async (isDraft: boolean = false) => {
-  // Багш сонгох шаардлагагүй - ноорог хадгалах үед
-  if (!isDraft && !selectedTeacher) {
-    setSubmitError("Тайлан илгээх багшаа сонгоно уу");
-    return;
-  }
-
-  if (isDraft) {
-    setIsSavingDraft(true);
-  } else {
-    setIsSubmitting(true);
-  }
-  setSubmitError("");
-
-  try {
-    let response;
-    
-    // Хэрэв report_id байгаа бол savereportfields endpoint ашиглах
-    if (formData.report_id) {
-      // report_data-г JSONB төрлөөр хадгалах
-      // Дутуу бөглөсөн утгуудыг хадгалах (хоосон утгуудыг 0.00 гэж хадгалахгүй)
-      const valuesToSave = { ...formData.values };
-      
-      // Хоосон утгуудыг арилгах (null эсвэл undefined)
-      Object.keys(valuesToSave).forEach(key => {
-        if (valuesToSave[key] === undefined || valuesToSave[key] === null) {
-          delete valuesToSave[key];
-        }
-      });
-      
-      const payload = {
-        report_data: valuesToSave
-      };
-
-      console.log("Хадгалах утгууд (дутуу бөглөсөн):", payload);
-      console.log("Report ID:", formData.report_id);
-
-      response = await fetch(`http://localhost:8000/api/report/savereportfields/${formData.report_id}/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-    } else {
-      // Шинэ тайлан үүсгэх
-      const payload = {
-        student_id: parseInt(formData.student_id),
-        report_type_id: formData.report_type_id,
-        tax_period_year: formData.tax_period_year,
-        tax_period_month: formData.tax_period_month,
-        values: formData.values,
-        teacher_id: selectedTeacher?.id,
-        is_draft: isDraft,
-      };
-
-      console.log("Шинэ тайлангийн өгөгдөл:", payload);
-
-      response = await fetch("http://localhost:8000/api/reports/add/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-    }
-
-    const data = await response.json();
-
-    console.log("Серверийн хариу:", data);
-
-    // resultCode шалгах
-    if (data.resultCode === 7820 || data.resultCode === 7220) {
-      let successMessage = "";
-      if (isDraft) {
-        successMessage = "Тайлан ноорог хэлбэрээр амжилттай хадгалагдлаа. Дараа үргэлжлүүлж бөглөх боломжтой.";
-      } else {
-        successMessage = "Тайлан амжилттай илгээгдлээ.";
+  const getAllFields = useCallback((): Field[] => {
+    const allFields: Field[] = [];
+    const collectFields = (fields: Field[]) => {
+      for (const field of fields) {
+        allFields.push(field);
+        if (field.children?.length) collectFields(field.children);
       }
-      
-      setSubmitSuccess(true);
-      // Success message-ийг дэлгэрэнгүй харуулах
-      const successDiv = document.createElement('div');
-      successDiv.className = 'fixed top-4 right-4 z-50 animate-slide-in';
-      successDiv.innerHTML = `
-        <div class="bg-green-50 border border-green-200 rounded-xl p-4 shadow-lg">
-          <div class="flex items-center gap-3">
-            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-            </svg>
-            <div>
-              <p class="text-green-800 font-medium">${successMessage}</p>
-              ${isDraft ? '<p class="text-green-600 text-sm mt-1">Та дараа нь нэвтэрч үргэлжлүүлж бөглөх боломжтой.</p>' : ''}
-            </div>
+    };
+    collectFields(reportStructure.sections.flatMap((s) => s.fields));
+    return allFields;
+  }, []);
+
+  const showSuccessNotification = (message: string, subMessage?: string) => {
+    const successDiv = document.createElement("div");
+    successDiv.className = "fixed top-4 right-4 z-50";
+    successDiv.innerHTML = `
+      <div class="bg-green-50 border border-green-200 rounded-xl p-4 shadow-lg">
+        <div class="flex items-center gap-3">
+          <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+          <div>
+            <p class="text-green-800 font-medium">${message}</p>
+            ${subMessage ? `<p class="text-green-600 text-sm mt-1">${subMessage}</p>` : ""}
           </div>
-        </div>
-      `;
-      document.body.appendChild(successDiv);
-      setTimeout(() => {
-        successDiv.remove();
-      }, 5000);
-      
-      setTimeout(() => setSubmitSuccess(false), 5000);
-
-      if (!isDraft) {
-        setTimeout(() => {
-          router.push("/student/reports");
-        }, 2000);
-      }
-    } else {
-      throw new Error(data.resultMessage || `Алдаа гарлаа (Код: ${data.resultCode})`);
-    }
-  } catch (error: any) {
-    console.error("Хадгалахад алдаа:", error);
-    setSubmitError(error.message || "Тайлан хадгалахад алдаа гарлаа");
-  } finally {
-    setIsSubmitting(false);
-    setIsSavingDraft(false);
-  }
-};
-
-  // app/student/tax-report/page.tsx - Input рендерлэх хэсэг
-
-// Input-ын утгыг харуулах
-const getDisplayValue = (fieldId: string): string => {
-  const value = formData.values[fieldId];
-  // Хэрэв утга байхгүй эсвэл хоосон бол хоосон string харуулах
-  if (value === undefined || value === null || value === "") {
-    return "";
-  }
-  return value;
-};
-
-// Тайлангийн мөрүүдийг рендерлэх
-const renderFields = (fields: Field[], level: number = 0) => {
-  return fields.sort((a, b) => a.order - b.order).map((field) => (
-    <div key={field.id}>
-      <div className={`grid grid-cols-12 gap-4 p-3 ${field.isCalculated ? 'bg-blue-50' : ''} border-b border-gray-200 hover:bg-gray-50/50 transition`}>
-        <div className="col-span-1 font-medium text-gray-700 text-center">
-          {field.id}
-        </div>
-        <div className="col-span-8">
-          <div className="text-sm text-gray-900" style={{ paddingLeft: `${level * 20}px` }}>
-            {field.label}
-            {field.isCalculated && field.calculationRule && (
-              <span className="ml-2 text-xs text-blue-600">
-                (Томьёо: {field.calculationRule})
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="col-span-3">
-          <input
-            type="number"
-            step="0.01"
-            value={getDisplayValue(field.id)}
-            onChange={(e) => handleInputChange(field.id, e.target.value)}
-            readOnly={field.isCalculated}
-            placeholder="0.00"
-            className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-right ${
-              field.isCalculated 
-                ? 'bg-blue-100/50 font-medium text-blue-900 cursor-not-allowed' 
-                : 'bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-            } ${!formData.values[field.id] && !field.isCalculated ? 'border-yellow-300 bg-yellow-50/30' : ''}`}
-          />
-          {/* Дутуу бөглөсөн талбарын тэмдэглэгээ */}
-          {!formData.values[field.id] && !field.isCalculated && (
-            <div className="text-xs text-yellow-600 mt-1 text-right">
-              ⚠️ Бөглөх шаардлагатай
-            </div>
-          )}
         </div>
       </div>
-      {field.children && renderFields(field.children, level + 1)}
-    </div>
-  ));
-};
+    `;
+    document.body.appendChild(successDiv);
+    setTimeout(() => successDiv.remove(), 5000);
+  };
 
-  // Summary утгууд
+  // ✅ ЗАСВАРЛАСАН saveReport — reportIdRef ашиглан үргэлж зөв ID уншина
+  const saveReport = async (isDraft: boolean = false) => {
+    if (!isDraft && !selectedTeacher) {
+      setSubmitError("Тайлан илгээх багшаа сонгоно уу");
+      return;
+    }
+
+    if (isDraft) setIsSavingDraft(true);
+    else setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const allFields = getAllFields();
+
+      // Хадгалах утгуудыг бэлтгэх
+      const valuesToSave: Record<string, string> = {};
+      for (const field of allFields) {
+        const value = formData.values[field.id];
+        const num = parseFloat(value);
+        valuesToSave[field.id] =
+          value === undefined || value === null || value === ""
+            ? "0"
+            : isNaN(num)
+            ? "0"
+            : num.toString();
+      }
+
+      // ✅ ГОЛ ЗАСВАР: ref-ээс report_id-г уншина — хэзээ ч stale болохгүй
+      const currentReportId = reportIdRef.current;
+
+      console.log("Одоогийн report_id (ref-ээс):", currentReportId);
+
+      let response: Response;
+
+      if (currentReportId) {
+        // ✅ ҮРГЭЛЖ UPDATE — URL дээр id байвал эсвэл өмнө хадгалсан бол
+        const payload = { report_data: valuesToSave };
+        console.log("UPDATE хүсэлт:", { report_id: currentReportId, payload });
+
+        response = await fetch(
+          `http://localhost:8000/api/report/savereportfields/${currentReportId}/`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        // INSERT — зөвхөн шинэ тайлан үүсгэх үед
+        const nonCalculatedValues: Record<string, string> = {};
+        for (const field of allFields) {
+          if (!field.isCalculated) {
+            const value = formData.values[field.id];
+            const num = parseFloat(value);
+            nonCalculatedValues[field.id] =
+              value === undefined || value === null || value === ""
+                ? "0"
+                : isNaN(num)
+                ? "0"
+                : num.toString();
+          }
+        }
+
+        const payload = {
+          student_id: parseInt(formData.student_id),
+          report_type_id: formData.report_type_id,
+          tax_period_year: formData.tax_period_year,
+          tax_period_month: formData.tax_period_month,
+          values: nonCalculatedValues,
+          teacher_id: selectedTeacher?.id,
+          is_draft: isDraft,
+        };
+
+        console.log("INSERT хүсэлт:", payload);
+
+        response = await fetch(
+          "http://localhost:8000/api/report/addsubmission/",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload),
+          }
+        );
+      }
+
+      const data = await response.json();
+      console.log("Серверийн хариу:", data);
+
+      if (data.resultCode === 7820 || data.resultCode === 7220) {
+        // ✅ Шинэ тайлан үүсгэсэн бол report_id-г ref болон state-д хадгалах
+        if (!currentReportId && data.data?.report_id) {
+          reportIdRef.current = data.data.report_id;
+          setFormData((prev) => ({
+            ...prev,
+            report_id: data.data.report_id,
+          }));
+          console.log("Шинэ report_id хадгалагдлаа:", data.data.report_id);
+        }
+
+        const successMessage = isDraft
+          ? "Тайлан ноорог хэлбэрээр амжилттай хадгалагдлаа."
+          : "Тайлан амжилттай илгээгдлээ.";
+
+        setSubmitSuccess(true);
+        showSuccessNotification(
+          successMessage,
+          isDraft ? "Та дараа нь нэвтэрч үргэлжлүүлж бөглөх боломжтой." : undefined
+        );
+        setTimeout(() => setSubmitSuccess(false), 5000);
+
+        if (!isDraft) {
+          setTimeout(() => router.push("/student/reports"), 2000);
+        }
+      } else if (data.resultCode === 7824) {
+        setSubmitError("Method буруу. Зөвхөн POST хүсэлт илгээнэ үү.");
+      } else if (data.resultCode === 7825) {
+        setSubmitError("Хүсэлтийн бие (body) JSON форматтай биш байна.");
+      } else if (data.resultCode === 7826) {
+        setSubmitError("report_data хоосон байна.");
+      } else if (data.resultCode === 7822) {
+        setSubmitError("Мэдээллийн сангийн алдаа гарлаа.");
+      } else if (data.resultCode === 7823) {
+        setSubmitError("Серверийн алдаа гарлаа.");
+      } else if (data.resultCode === 8213) {
+        setSubmitError(
+          "Токен хүчингүй эсвэл хугацаа нь дууссан байна. Дахин нэвтэрнэ үү."
+        );
+        setTimeout(() => router.push("/login"), 2000);
+      } else {
+        setSubmitError(
+          data.resultMessage || `Алдаа гарлаа (Код: ${data.resultCode})`
+        );
+      }
+    } catch (error: any) {
+      console.error("Хадгалахад алдаа:", error);
+      setSubmitError(error.message || "Тайлан хадгалахад алдаа гарлаа");
+    } finally {
+      setIsSubmitting(false);
+      setIsSavingDraft(false);
+    }
+  };
+
+  const renderFields = (fields: Field[], level: number = 0) => {
+    return fields
+      .sort((a, b) => a.order - b.order)
+      .map((field) => (
+        <div key={field.id}>
+          <div
+            className={`grid grid-cols-12 gap-4 p-3 ${
+              field.isCalculated ? "bg-blue-50" : ""
+            } border-b border-gray-200 hover:bg-gray-50/50 transition`}
+          >
+            <div className="col-span-1 font-medium text-gray-700 text-center">
+              {field.id}
+            </div>
+            <div className="col-span-8">
+              <div
+                className="text-sm text-gray-900"
+                style={{ paddingLeft: `${level * 20}px` }}
+              >
+                {field.label}
+                {field.isCalculated && field.calculationRule && (
+                  <span className="ml-2 text-xs text-blue-600">
+                    (Томьёо: {field.calculationRule})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="col-span-3">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={getDisplayValue(field.id)}
+                onChange={(e) => handleInputChange(field.id, e.target.value)}
+                onFocus={() => handleFocus(field.id)}
+                onBlur={() => handleBlur(field.id)}
+                readOnly={field.isCalculated}
+                placeholder="0.00 ₮"
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-right text-gray-900 font-normal ${
+                  field.isCalculated
+                    ? "bg-blue-100/50 font-medium cursor-not-allowed"
+                    : "bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                } ${
+                  (!formData.values[field.id] ||
+                    formData.values[field.id] === "") &&
+                  !field.isCalculated
+                    ? "border-yellow-300 bg-yellow-50/30"
+                    : ""
+                }`}
+              />
+            </div>
+          </div>
+          {field.children && renderFields(field.children, level + 1)}
+        </div>
+      ));
+  };
+
   const summaryValues = [
     { id: "31", label: "Нийтлэг хувь хэмжээгээр ногдуулсан татвар", value: getValue("31") },
     { id: "51", label: "Тусгай хувь хэмжээгээр ногдуулсан татвар", value: getValue("51") },
@@ -729,22 +808,30 @@ const renderFields = (fields: Field[], level: number = 0) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
       <Header />
-      
+
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Navigation Breadcrumb */}
+        {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-          <Link href="/student/dashboard" className="hover:text-blue-600 flex items-center gap-1">
+          <Link
+            href="/student/dashboard"
+            className="hover:text-blue-600 flex items-center gap-1"
+          >
             <FiHome className="text-sm" />
             Нүүр
           </Link>
           <span>/</span>
-          <Link href="/student/reports" className="hover:text-blue-600 flex items-center gap-1">
+          <Link
+            href="/student/reports"
+            className="hover:text-blue-600 flex items-center gap-1"
+          >
             <FiFileText className="text-sm" />
             Тайлангууд
           </Link>
           <span>/</span>
           <span className="text-gray-900 font-medium">
-            {formData.report_id ? `Тайлан засварлах${formData.report_name ? ` - ${formData.report_name}` : ''}` : "Татварын тайлан"}
+            {formData.report_id
+              ? `Тайлан засварлах${formData.report_name ? ` - ${formData.report_name}` : ""}`
+              : "Татварын тайлан"}
           </span>
         </div>
 
@@ -764,26 +851,36 @@ const renderFields = (fields: Field[], level: number = 0) => {
               )}
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3 mt-4 md:mt-0">
             <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200">
               <FiCalendar className="text-gray-400" />
               <select
                 value={formData.tax_period_year}
-                onChange={(e) => setFormData(prev => ({ ...prev, tax_period_year: parseInt(e.target.value) }))}
-                className="border-none focus:ring-0 text-sm bg-transparent"
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tax_period_year: parseInt(e.target.value),
+                  }))
+                }
+                className="border-none focus:ring-0 text-sm bg-transparent text-gray-900"
               >
-                {[2023, 2024, 2025, 2026].map(year => (
+                {[2023, 2024, 2025, 2026].map((year) => (
                   <option key={year} value={year}>{year} он</option>
                 ))}
               </select>
               <span className="text-gray-300">|</span>
               <select
                 value={formData.tax_period_month}
-                onChange={(e) => setFormData(prev => ({ ...prev, tax_period_month: parseInt(e.target.value) }))}
-                className="border-none focus:ring-0 text-sm bg-transparent"
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    tax_period_month: parseInt(e.target.value),
+                  }))
+                }
+                className="border-none focus:ring-0 text-sm bg-transparent text-gray-900"
               >
-                {[1,2,3,4,5,6,7,8,9,10,11,12].map(month => (
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
                   <option key={month} value={month}>{month} сар</option>
                 ))}
               </select>
@@ -791,7 +888,7 @@ const renderFields = (fields: Field[], level: number = 0) => {
           </div>
         </div>
 
-        {/* Багш сонгох хэсэг */}
+        {/* Багш сонгох */}
         <div className="mb-6">
           {!showTeacherList ? (
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-5">
@@ -803,16 +900,18 @@ const renderFields = (fields: Field[], level: number = 0) => {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Тайлан илгээх багш <span className="text-red-500">*</span>
                   </label>
-                  
                   {selectedTeacher ? (
                     <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center font-bold text-lg">
-                          {selectedTeacher.first_name?.charAt(0) || selectedTeacher.email?.charAt(0).toUpperCase() || 'Б'}
+                          {selectedTeacher.first_name?.charAt(0) ||
+                            selectedTeacher.email?.charAt(0).toUpperCase() ||
+                            "Б"}
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900">
-                            {selectedTeacher.last_name} {selectedTeacher.first_name}
+                            {selectedTeacher.last_name}{" "}
+                            {selectedTeacher.first_name}
                           </p>
                           <p className="text-sm text-gray-500 flex items-center gap-1">
                             <FiUser className="text-xs" />
@@ -833,7 +932,9 @@ const renderFields = (fields: Field[], level: number = 0) => {
                       className="w-full md:w-96 px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl text-left text-gray-500 hover:border-blue-400 hover:bg-blue-50 transition flex items-center gap-3 group"
                     >
                       <FiUser className="text-gray-400 group-hover:text-blue-500" />
-                      <span className="group-hover:text-blue-600">Багш сонгоно уу...</span>
+                      <span className="group-hover:text-blue-600">
+                        Багш сонгоно уу...
+                      </span>
                     </button>
                   )}
                 </div>
@@ -849,7 +950,9 @@ const renderFields = (fields: Field[], level: number = 0) => {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900">Багш сонгох</h3>
-                      <p className="text-sm text-gray-500">Нийт {teachers.length} багш бүртгэлтэй</p>
+                      <p className="text-sm text-gray-500">
+                        Нийт {teachers.length} багш бүртгэлтэй
+                      </p>
                     </div>
                   </div>
                   <button
@@ -861,7 +964,6 @@ const renderFields = (fields: Field[], level: number = 0) => {
                   </button>
                 </div>
               </div>
-              
               <div className="p-5">
                 {isLoadingTeachers ? (
                   <div className="flex justify-center items-center py-12">
@@ -882,26 +984,31 @@ const renderFields = (fields: Field[], level: number = 0) => {
                         whileHover={{ scale: 1.02 }}
                         onClick={() => {
                           setSelectedTeacher(teacher);
-                          setFormData(prev => ({ ...prev, teacher_id: teacher.id }));
+                          setFormData((prev) => ({
+                            ...prev,
+                            teacher_id: teacher.id,
+                          }));
                           setShowTeacherList(false);
                         }}
-                        className={`
-                          p-4 rounded-xl border-2 cursor-pointer transition-all
-                          ${selectedTeacher?.id === teacher.id 
-                            ? 'border-blue-500 bg-blue-50 shadow-md' 
-                            : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
-                          }
-                        `}
+                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                          selectedTeacher?.id === teacher.id
+                            ? "border-blue-500 bg-blue-50 shadow-md"
+                            : "border-gray-200 hover:border-blue-300 hover:shadow-md"
+                        }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
-                            {teacher.first_name?.charAt(0) || teacher.email?.charAt(0).toUpperCase() || 'Б'}
+                            {teacher.first_name?.charAt(0) ||
+                              teacher.email?.charAt(0).toUpperCase() ||
+                              "Б"}
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-gray-900 truncate">
                               {teacher.last_name} {teacher.first_name}
                             </h4>
-                            <p className="text-sm text-gray-500 truncate">{teacher.email}</p>
+                            <p className="text-sm text-gray-500 truncate">
+                              {teacher.email}
+                            </p>
                           </div>
                           {selectedTeacher?.id === teacher.id && (
                             <FiCheckCircle className="text-green-500 flex-shrink-0" />
@@ -916,7 +1023,7 @@ const renderFields = (fields: Field[], level: number = 0) => {
           )}
         </div>
 
-        {/* Success/Error Messages */}
+        {/* Alerts */}
         <AnimatePresence>
           {submitSuccess && (
             <motion.div
@@ -929,7 +1036,6 @@ const renderFields = (fields: Field[], level: number = 0) => {
               <span>Тайлан амжилттай хадгалагдлаа.</span>
             </motion.div>
           )}
-
           {submitError && (
             <motion.div
               initial={{ opacity: 0, y: -20 }}
@@ -955,7 +1061,7 @@ const renderFields = (fields: Field[], level: number = 0) => {
             >
               <div className="text-sm text-gray-500 mb-2">Мөр {item.id}</div>
               <div className="text-2xl font-bold text-gray-900">
-                {item.value.toFixed(2).toLocaleString()} ₮
+                {formatAsMoney(item.value)}
               </div>
               <div className="text-xs text-gray-400 mt-1">{item.label}</div>
             </motion.div>
@@ -971,9 +1077,10 @@ const renderFields = (fields: Field[], level: number = 0) => {
             <FiRefreshCw />
             Бүгдийг 0 болгох
           </button>
+
           <button
             onClick={() => saveReport(true)}
-            disabled={isSavingDraft || !formData.report_id}
+            disabled={isSavingDraft}
             className="px-5 py-2 bg-white border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSavingDraft ? (
@@ -988,9 +1095,10 @@ const renderFields = (fields: Field[], level: number = 0) => {
               </>
             )}
           </button>
+
           <button
             onClick={() => saveReport(false)}
-            disabled={isSubmitting || !formData.report_id || !selectedTeacher}
+            disabled={isSubmitting || !selectedTeacher}
             className="px-6 py-2 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
           >
             {isSubmitting ? (
@@ -1020,16 +1128,12 @@ const renderFields = (fields: Field[], level: number = 0) => {
               <div className="bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] px-6 py-4">
                 <h2 className="text-lg font-bold text-white">{section.title}</h2>
               </div>
-              
               <div className="p-4">
-                {/* Table Header */}
                 <div className="grid grid-cols-12 gap-4 px-3 py-2 bg-gray-100 rounded-t-lg font-medium text-sm text-gray-700">
                   <div className="col-span-1">Мөр</div>
                   <div className="col-span-8">Үзүүлэлтүүд</div>
                   <div className="col-span-3">Дүн (₮)</div>
                 </div>
-                
-                {/* Fields */}
                 <div className="border-x border-b border-gray-200 rounded-b-lg divide-y divide-gray-200">
                   {renderFields(section.fields)}
                 </div>
@@ -1038,7 +1142,6 @@ const renderFields = (fields: Field[], level: number = 0) => {
           ))}
         </div>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-xs text-gray-400">
           <p>Тооцоолол автоматаар шинэчлэгдэнэ. Цэнхэр мөрүүд нь томьёотой мөрүүд.</p>
           <p className="mt-1">Бүх дүнг MNT (төгрөг)-өөр бөглөнө үү.</p>
