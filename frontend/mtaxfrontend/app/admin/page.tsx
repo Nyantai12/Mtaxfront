@@ -33,6 +33,7 @@ import {
   Cell,
 } from "recharts";
 import Link from "next/link";
+import Header from "../component/Header";
 
 export default function AdminDashboard() {
   const [dateRange, setDateRange] = useState("week");
@@ -123,25 +124,24 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Header />
       {/* Sidebar */}
       <div className="fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-[#0f172a] to-[#1e3a8a] text-white">
         <div className="p-6">
-          <div className="flex items-center gap-3 mb-8">
-            <img src="images/logomandah.png" alt="Logo" className="w-10 h-10" />
+          <div className="flex items-center gap-3 mb-8 mt-15">
+            
             <div>
-              <h2 className="font-bold">Админ самбар</h2>
+              <h2 className="font-bold text-xl">Админ самбар</h2>
               <p className="text-xs text-blue-200">Мандах ИС</p>
             </div>
           </div>
 
           <nav className="space-y-2">
-            <Link href="/" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
-              <FiHome /> Нүүр хуудас
-            </Link>
-            <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl">
+            
+            <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl ">
               <FiBarChart2 /> Хянах самбар
             </Link>
-            <Link href="/admin/users" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
+            {/* <Link href="/admin/users" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
               <FiUsers /> Хэрэглэгчид
             </Link>
             <Link href="/admin/reports" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
@@ -152,7 +152,7 @@ export default function AdminDashboard() {
             </Link>
             <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
               <FiSettings /> Тохиргоо
-            </Link>
+            </Link> */}
           </nav>
         </div>
       </div>

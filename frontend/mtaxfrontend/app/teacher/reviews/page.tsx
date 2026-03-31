@@ -677,24 +677,35 @@ export default function TeacherReviewPage() {
 
                 {/* Report Content - JSONB өгөгдлийг харуулах */}
                 <div className="mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">Тайлангийн агуулга</h3>
-                  <div className="bg-gray-50 rounded-xl p-4 text-gray-700 max-h-[400px] overflow-y-auto">
-                    {selectedReport.report_data && Object.keys(selectedReport.report_data).length > 0 ? (
-                      <div className="space-y-2">
-                        {Object.entries(selectedReport.report_data)
-                          .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                          .map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center border-b border-gray-200 py-2">
-                              <span className="text-sm font-medium text-gray-600">Мөр {key}</span>
-                              <span className="text-sm text-gray-900">{Number(value).toLocaleString()} ₮</span>
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <p className="text-gray-500">Тайлангийн мэдээлэл байхгүй байна</p>
-                    )}
+                  <h3 className="font-semibold text-gray-900 mb-3 text-lg">
+                    Тайлангийн агуулга
+                  </h3>
+                <div
+                  onClick={() => router.push(`/teacher/reviews/${selectedReport.id}`)}
+                  className="relative bg-white rounded-2xl p-5 shadow-md border border-gray-100 
+                            hover:shadow-lg transition-all duration-300 cursor-pointer"
+                >
+                  {/* Top gradient accent */}
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r 
+                                  from-indigo-500 via-purple-500 to-pink-500 rounded-t-2xl" />
+
+                  {/* Content */}
+                  <div className="mt-2 space-y-3">
+                    <h3 className="text-xl font-semibold text-gray-900 line-clamp-2">
+                      {selectedReport.title}
+                    </h3>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-100 my-2" />
+
+                    {/* Scrollable content area */}
+                    <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[250px] overflow-y-auto text-sm leading-relaxed">
+                      {selectedReport.content || "Тайлангийн дэлгэрэнгүй харах..."}
+                    </div>
                   </div>
-                </div>
+                </div>    
+                </div>    
+
 
                 {/* Review Section */}
                 <div className="border-t border-gray-200 pt-6">
