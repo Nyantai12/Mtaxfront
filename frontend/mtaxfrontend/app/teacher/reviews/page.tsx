@@ -1,6 +1,7 @@
+// app/teacher/review/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   FiFileText,
@@ -17,94 +18,370 @@ import {
   FiUser,
   FiCalendar,
   FiPaperclip,
+  FiAlertCircle,
+  FiMail,
 } from "react-icons/fi";
 import { FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
 import Header from "@/app/component/Header";
+import { useRouter } from "next/navigation";
+
+// Интерфейсүүд
+interface Report {
+  id: number;
+  title: string;
+  student: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  type: string;
+  type_name?: string;
+  type_id?: number;
+  course?: string;
+  submitted_at: string;
+  status: string;
+  content?: string;
+  report_data?: any;
+  attachments?: string[];
+  teacher_id?: number;
+  teacher_name?: string;
+  reviewed_at?: string;
+  feedback?: string;
+}
+
+interface TeacherInfo {
+  id: number;
+  name: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  department?: string;
+}
+
+interface TeacherReportListItem {
+  report_id: number;
+  email: string;
+  student_email?: string;
+  student_name?: string;
+}
 
 export default function TeacherReviewPage() {
-  const [selectedReport, setSelectedReport] = useState<any>(null);
+  const router = useRouter();
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [error, setError] = useState("");
+  const [teacherInfo, setTeacherInfo] = useState<TeacherInfo | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
 
-  // Mock teacher info
-  const teacherInfo = {
-    name: "Г. Батбаяр",
-    department: "Мэдээллийн технологи",
-    reportsToReview: 12,
-    reviewedToday: 5
+  // Хэрэглэгчийн мэдээлэл авах
+  useEffect(() => {
+    const user = localStorage.getItem("user");
+    if (user) {
+      const userData = JSON.parse(user);
+      setTeacherInfo({
+        id: userData.id,
+        name: `${userData.last_name || ""} ${userData.first_name || ""}`,
+        first_name: userData.first_name,
+        last_name: userData.last_name,
+        email: userData.email,
+        department: userData.department,
+      });
+    } else {
+      router.push("/login");
+    }
+  }, [router]);
+
+  // Тайлангийн жагсаалт татах
+  useEffect(() => {
+    if (teacherInfo?.id) {
+      fetchReports();
+    }
+  }, [teacherInfo]);
+
+  const fetchReports = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("http://localhost:8000/api/report/teacherreportlist/", {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+      console.log("Тайлангийн жагсаалт (teacherreportlist):", data);
+
+      if (data.resultCode === 7640 && data.data) {
+        const reportList: TeacherReportListItem[] = data.data;
+        
+        if (reportList.length === 0) {
+          setReports([]);
+          setLoading(false);
+          return;
+        }
+
+        // Тайлан бүрийн дэлгэрэнгүй мэдээллийг тусад нь татах
+        setLoadingReports(true);
+        const detailedReports: Report[] = [];
+        
+        for (const item of reportList) {
+          try {
+            const detailResponse = await fetch(`http://localhost:8000/api/report/${item.report_id}/`, {
+              method: "GET",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+            });
+            
+            const detailData = await detailResponse.json();
+            console.log(`Тайлан ${item.report_id} дэлгэрэнгүй:`, detailData);
+            
+            if (detailData.resultCode === 7520 && detailData.data) {
+              const report = detailData.data;
+              detailedReports.push({
+                id: report.report_id || item.report_id,
+                title: report.type_name || `Тайлан ${item.report_id}`,
+                student: report.student_name || report.student_full_name || "Оюутан",
+                student_id: report.student_id?.toString() || "",
+                student_name: report.student_name || "",
+                student_email: report.student_email || item.email || item.student_email || "",
+                type: report.type_name || "Тайлан",
+                type_name: report.type_name,
+                type_id: report.type_id,
+                course: report.course_name || "Хичээл",
+                submitted_at: report.created_at || report.submitted_at || new Date().toISOString(),
+                status: report.status || "pending",
+                content: report.content,
+                report_data: report.report_data,
+                attachments: report.attachments || [],
+                teacher_id: report.teacher_id,
+                teacher_name: report.teacher_name,
+                reviewed_at: report.reviewed_at,
+                feedback: report.feedback,
+              });
+            } else {
+              // Хэрэв дэлгэрэнгүй мэдээлэл авахгүй бол үндсэн мэдээллээр хийх
+              detailedReports.push({
+                id: item.report_id,
+                title: `Тайлан ${item.report_id}`,
+                student: "Оюутан",
+                student_id: "",
+                student_name: "",
+                student_email: item.email || "",
+                type: "Тайлан",
+                type_name: "Тайлан",
+                course: "Хичээл",
+                submitted_at: new Date().toISOString(),
+                status: "pending",
+                report_data: null,
+                attachments: [],
+              });
+            }
+          } catch (err) {
+            console.error(`Тайлан ${item.report_id} дэлгэрэнгүй татахад алдаа:`, err);
+            // Алдаа гарсан ч үндсэн мэдээллээр нэмэх
+            detailedReports.push({
+              id: item.report_id,
+              title: `Тайлан ${item.report_id}`,
+              student: "Оюутан",
+              student_id: "",
+              student_name: "",
+              student_email: item.email || "",
+              type: "Тайлан",
+              type_name: "Тайлан",
+              course: "Хичээл",
+              submitted_at: new Date().toISOString(),
+              status: "pending",
+              report_data: null,
+              attachments: [],
+            });
+          }
+        }
+        
+        setReports(detailedReports);
+        setLoadingReports(false);
+      } else if (data.resultCode === 8213) {
+        setError("Хэрэглэгчийн эрх баталгаажаагүй байна. Дахин нэвтэрнэ үү.");
+        setTimeout(() => {
+          router.push("/login");
+        }, 2000);
+      } else {
+        setError(data.resultMessage || "Тайлан ачаалахад алдаа гарлаа");
+      }
+    } catch (error) {
+      console.error("Тайлан ачаалахад алдаа:", error);
+      setError("Сервертэй холбогдоход алдаа гарлаа");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Mock reports data
-  const reports = [
-    {
-      id: 1,
-      title: "Дадлагын тайлан 1",
-      student: "Б. Мөнхжин",
-      studentId: "MT2024001",
-      type: "Өдрийн тайлан",
-      course: "Программ хангамж",
-      submittedAt: "2026-02-23 10:30",
-      status: "pending",
-      content: "Өнөөдрийн дадлагын ажлын тайлан...",
-      attachments: ["report1.pdf", "images.zip"]
-    },
-    {
-      id: 2,
-      title: "Төслийн тайлан",
-      student: "С. Номин",
-      studentId: "MT2024002",
-      type: "Төслийн тайлан",
-      course: "Вэб хөгжүүлэлт",
-      submittedAt: "2026-02-23 09:15",
-      status: "reviewed",
-      content: "Вэб сайтын төслийн явцын тайлан...",
-      attachments: ["project.docx"]
-    },
-    {
-      id: 3,
-      title: "Долоо хоногийн тайлан",
-      student: "Д. Тэмүүлэн",
-      studentId: "MT2024003",
-      type: "Долоо хоногийн тайлан",
-      course: "Мэдээллийн аюулгүй байдал",
-      submittedAt: "2026-02-22 16:45",
-      status: "approved",
-      content: "7-р долоо хоногийн судалгааны ажил...",
-      attachments: ["weekly_report.pdf"]
-    },
-    {
-      id: 4,
-      title: "Сарын тайлан",
-      student: "Э. Маралмаа",
-      studentId: "MT2024004",
-      type: "Сарын тайлан",
-      course: "Өгөгдлийн сан",
-      submittedAt: "2026-02-22 14:20",
-      status: "rejected",
-      content: "2-р сарын гүйцэтгэлийн тайлан...",
-      attachments: ["monthly_report.docx"]
-    },
-    {
-      id: 5,
-      title: "Дадлагын тайлан 2",
-      student: "Б. Мөнхжин",
-      studentId: "MT2024001",
-      type: "Өдрийн тайлан",
-      course: "Программ хангамж",
-      submittedAt: "2026-02-21 14:20",
-      status: "approved",
-      content: "Дадлагын хоёр дахь өдрийн тайлан...",
-      attachments: ["report2.pdf"]
-    },
-  ];
+  // Тайлангийн дэлгэрэнгүй мэдээлэл татах (сонгосон үед)
+  const fetchReportDetail = async (reportId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/report/${reportId}/`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
-  const filteredReports = reports.filter(report => {
-    if (filterStatus !== "all" && report.status !== filterStatus) return false;
-    if (searchQuery && !report.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !report.student.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
+      const data = await response.json();
+      console.log("Тайлангийн дэлгэрэнгүй:", data);
+
+      if (data.resultCode === 7520 && data.data) {
+        const reportDetail = data.data;
+        setSelectedReport(prev => ({
+          ...prev!,
+          content: reportDetail.content,
+          report_data: reportDetail.report_data,
+          attachments: reportDetail.attachments || [],
+          feedback: reportDetail.feedback,
+          student_email: reportDetail.student_email || prev?.student_email || "",
+        }));
+        
+        if (reportDetail.feedback) {
+          setFeedbackText(reportDetail.feedback);
+        }
+      }
+    } catch (error) {
+      console.error("Тайлангийн дэлгэрэнгүй ачаалахад алдаа:", error);
+    }
+  };
+
+  // Тайлан сонгох үед
+  const handleSelectReport = (report: Report) => {
+    setSelectedReport(report);
+    setFeedbackText(report.feedback || "");
+    fetchReportDetail(report.id);
+  };
+
+  // Тайлан баталгаажуулах
+  const handleApprove = async () => {
+    if (!selectedReport) return;
+    
+    setSubmitting(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/report/review/${selectedReport.id}/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: "approved",
+          feedback: feedbackText,
+        }),
+      });
+
+      const data = await response.json();
+      console.log("Баталгаажуулсан хариу:", data);
+
+      if (data.resultCode === 7820 || data.resultCode === 7220) {
+        setReports(prev => 
+          prev.map(r => 
+            r.id === selectedReport.id 
+              ? { ...r, status: "approved", feedback: feedbackText, reviewed_at: new Date().toISOString() }
+              : r
+          )
+        );
+        setSelectedReport(prev => 
+          prev ? { ...prev, status: "approved", feedback: feedbackText } : null
+        );
+        
+        showNotification("Тайлан амжилттай баталгаажууллаа.", "success");
+      } else {
+        setError(data.resultMessage || "Баталгаажуулахад алдаа гарлаа");
+      }
+    } catch (error) {
+      console.error("Баталгаажуулахад алдаа:", error);
+      setError("Сервертэй холбогдоход алдаа гарлаа");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Тайлан татгалзах
+  const handleReject = async () => {
+    if (!selectedReport) return;
+    
+    if (!feedbackText.trim()) {
+      setError("Татгалзах шалтгааныг бичнэ үү");
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/report/review/${selectedReport.id}/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: "rejected",
+          feedback: feedbackText,
+        }),
+      });
+
+      const data = await response.json();
+      console.log("Татгалзсан хариу:", data);
+
+      if (data.resultCode === 7820 || data.resultCode === 7220) {
+        setReports(prev => 
+          prev.map(r => 
+            r.id === selectedReport.id 
+              ? { ...r, status: "rejected", feedback: feedbackText, reviewed_at: new Date().toISOString() }
+              : r
+          )
+        );
+        setSelectedReport(prev => 
+          prev ? { ...prev, status: "rejected", feedback: feedbackText } : null
+        );
+        
+        showNotification("Тайлан татгалзлаа.", "error");
+      } else {
+        setError(data.resultMessage || "Татгалзахад алдаа гарлаа");
+      }
+    } catch (error) {
+      console.error("Татгалзахад алдаа:", error);
+      setError("Сервертэй холбогдоход алдаа гарлаа");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const showNotification = (message: string, type: "success" | "error") => {
+    const bgColor = type === "success" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200";
+    const textColor = type === "success" ? "text-green-800" : "text-red-800";
+    const iconColor = type === "success" ? "text-green-600" : "text-red-600";
+    const icon = type === "success" 
+      ? '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+      : '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+    
+    const notificationDiv = document.createElement("div");
+    notificationDiv.className = "fixed top-4 right-4 z-50 animate-slide-in";
+    notificationDiv.innerHTML = `
+      <div class="${bgColor} border rounded-xl p-4 shadow-lg">
+        <div class="flex items-center gap-3">
+          <div class="${iconColor}">${icon}</div>
+          <div>
+            <p class="${textColor} font-medium">${message}</p>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(notificationDiv);
+    setTimeout(() => notificationDiv.remove(), 3000);
+  };
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -117,22 +394,83 @@ export default function TeacherReviewPage() {
       case "rejected":
         return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Татгалзсан</span>;
       default:
-        return null;
+        return <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">{status}</span>;
     }
   };
 
+  const filteredReports = reports.filter(report => {
+    if (filterStatus !== "all" && report.status !== filterStatus) return false;
+    if (searchQuery && !report.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
+        !report.student.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !report.student_id.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !report.student_email.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+
+  const pendingCount = reports.filter(r => r.status === "pending").length;
+  const approvedCount = reports.filter(r => r.status === "approved").length;
+  const rejectedCount = reports.filter(r => r.status === "rejected").length;
+
+  if (loading || loadingReports) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex justify-center items-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
-        <Header />
-      {/* Main Content */}
+      <Header />
+      
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
+          <Link href="/teacher/dashboard" className="hover:text-blue-600 flex items-center gap-1">
+            <FiArrowLeft className="text-sm" />
+            Дашборд
+          </Link>
+          <span>/</span>
+          <span className="text-gray-900 font-medium">Тайлан хянах</span>
+        </div>
+
+        {/* Teacher Info */}
+        {teacherInfo && (
+          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                {teacherInfo.first_name?.charAt(0) || teacherInfo.name?.charAt(0) || 'Б'}
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{teacherInfo.name}</h2>
+                <p className="text-gray-500 flex items-center gap-1">
+                  <FiUser className="text-sm" />
+                  {teacherInfo.email}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+            <FiAlertCircle className="text-xl flex-shrink-0" />
+            <span>{error}</span>
+            <button onClick={() => setError("")} className="ml-auto text-red-500 hover:text-red-700">×</button>
+          </div>
+        )}
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Нийт тайлан</p>
-                <p className="text-3xl font-bold text-gray-900">24</p>
+                <p className="text-3xl font-bold text-gray-900">{reports.length}</p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                 <FiFileText className="text-blue-600 text-xl" />
@@ -144,7 +482,7 @@ export default function TeacherReviewPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500">Хүлээгдэж буй</p>
-                <p className="text-3xl font-bold text-yellow-600">{teacherInfo.reportsToReview}</p>
+                <p className="text-3xl font-bold text-yellow-600">{pendingCount}</p>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
                 <FiClock className="text-yellow-600 text-xl" />
@@ -155,11 +493,23 @@ export default function TeacherReviewPage() {
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Өнөөдөр хянасан</p>
-                <p className="text-3xl font-bold text-green-600">{teacherInfo.reviewedToday}</p>
+                <p className="text-sm text-gray-500">Баталгаажсан</p>
+                <p className="text-3xl font-bold text-green-600">{approvedCount}</p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                 <FiCheckCircle className="text-green-600 text-xl" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Татгалзсан</p>
+                <p className="text-3xl font-bold text-red-600">{rejectedCount}</p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                <FiXCircle className="text-red-600 text-xl" />
               </div>
             </div>
           </div>
@@ -173,7 +523,7 @@ export default function TeacherReviewPage() {
                 <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Тайлан эсвэл оюутны нэрээр хайх..."
+                  placeholder="Тайлан, оюутны нэр, ID эсвэл email-ээр хайх..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
@@ -190,7 +540,7 @@ export default function TeacherReviewPage() {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                Бүгд
+                Бүгд ({reports.length})
               </button>
               <button
                 onClick={() => setFilterStatus("pending")}
@@ -200,7 +550,7 @@ export default function TeacherReviewPage() {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                Хүлээгдэж буй
+                Хүлээгдэж буй ({pendingCount})
               </button>
               <button
                 onClick={() => setFilterStatus("approved")}
@@ -210,70 +560,78 @@ export default function TeacherReviewPage() {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                Баталгаажсан
+                Баталгаажсан ({approvedCount})
+              </button>
+              <button
+                onClick={() => setFilterStatus("rejected")}
+                className={`px-4 py-2 rounded-xl font-medium transition ${
+                  filterStatus === "rejected" 
+                    ? "bg-red-500 text-white" 
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Татгалзсан ({rejectedCount})
               </button>
             </div>
           </div>
-
-          {/* Filter chips */}
-          <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
-            <span className="text-sm text-gray-500 flex items-center gap-1">
-              <FiFilter className="text-gray-400" />
-              Шүүлт:
-            </span>
-          </div>
         </div>
 
-        {/* Reports List */}
+        {/* Reports List and Detail */}
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Reports List */}
           <div className="lg:col-span-1 space-y-4">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-semibold text-gray-900">Тайлангууд ({filteredReports.length})</h3>
-              <button className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1">
-                <FiFilter /> Шүүх
-              </button>
             </div>
             
-            {filteredReports.map((report) => (
-              <motion.div
-                key={report.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={() => setSelectedReport(report)}
-                className={`bg-white rounded-2xl p-4 shadow-lg border-2 cursor-pointer transition ${
-                  selectedReport?.id === report.id 
-                    ? "border-blue-500" 
-                    : "border-gray-100 hover:border-blue-300"
-                }`}
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{report.title}</h3>
-                    <p className="text-sm text-gray-600">{report.student}</p>
+            {filteredReports.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center">
+                <FiFileText className="text-4xl text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">Тайлан байхгүй байна</p>
+              </div>
+            ) : (
+              filteredReports.map((report) => (
+                <motion.div
+                  key={report.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => handleSelectReport(report)}
+                  className={`bg-white rounded-2xl p-4 shadow-lg border-2 cursor-pointer transition ${
+                    selectedReport?.id === report.id 
+                      ? "border-blue-500" 
+                      : "border-gray-100 hover:border-blue-300"
+                  }`}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 line-clamp-1">{report.title}</h3>
+                      <p className="text-sm text-gray-600">{report.student}</p>
+                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
+                        <FiMail className="text-xs" />
+                        {report.student_email}
+                      </p>
+                      <p className="text-xs text-gray-400">{report.student_id}</p>
+                    </div>
+                    {getStatusBadge(report.status)}
                   </div>
-                  {getStatusBadge(report.status)}
-                </div>
-                
-                <div className="flex items-center gap-4 text-xs text-gray-500">
-                  <span className="flex items-center gap-1">
-                    <FiUser /> {report.studentId}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <FiCalendar /> {report.submittedAt}
-                  </span>
-                </div>
+                  
+                  <div className="flex items-center gap-4 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <FiCalendar /> {new Date(report.submitted_at).toLocaleDateString()}
+                    </span>
+                  </div>
 
-                <div className="mt-3 flex gap-2">
-                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
-                    {report.course}
-                  </span>
-                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
-                    {report.type}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
+                  <div className="mt-3 flex gap-2">
+                    <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                      {report.course}
+                    </span>
+                    <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                      {report.type}
+                    </span>
+                  </div>
+                </motion.div>
+              ))
+            )}
           </div>
 
           {/* Right Column - Report Detail */}
@@ -288,12 +646,15 @@ export default function TeacherReviewPage() {
                 <div className="flex justify-between items-start mb-6">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedReport.title}</h2>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <div className="flex flex-col gap-1 text-sm text-gray-600">
                       <span className="flex items-center gap-1">
-                        <FiUser /> {selectedReport.student} ({selectedReport.studentId})
+                        <FiUser /> {selectedReport.student} ({selectedReport.student_id})
                       </span>
                       <span className="flex items-center gap-1">
-                        <FiCalendar /> Илгээсэн: {selectedReport.submittedAt}
+                        <FiMail /> {selectedReport.student_email}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FiCalendar /> Илгээсэн: {new Date(selectedReport.submitted_at).toLocaleString()}
                       </span>
                     </div>
                   </div>
@@ -314,85 +675,98 @@ export default function TeacherReviewPage() {
                   </div>
                 </div>
 
-                {/* Report Content */}
+                {/* Report Content - JSONB өгөгдлийг харуулах */}
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-900 mb-3">Тайлангийн агуулга</h3>
-                  <div className="bg-gray-50 rounded-xl p-4 text-gray-700 whitespace-pre-line min-h-[150px]">
-                    {selectedReport.content}
+                  <div className="bg-gray-50 rounded-xl p-4 text-gray-700 max-h-[400px] overflow-y-auto">
+                    {selectedReport.report_data && Object.keys(selectedReport.report_data).length > 0 ? (
+                      <div className="space-y-2">
+                        {Object.entries(selectedReport.report_data)
+                          .sort(([a], [b]) => parseInt(a) - parseInt(b))
+                          .map(([key, value]) => (
+                            <div key={key} className="flex justify-between items-center border-b border-gray-200 py-2">
+                              <span className="text-sm font-medium text-gray-600">Мөр {key}</span>
+                              <span className="text-sm text-gray-900">{Number(value).toLocaleString()} ₮</span>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500">Тайлангийн мэдээлэл байхгүй байна</p>
+                    )}
                   </div>
                 </div>
 
-                {/* Attachments */}
-                {selectedReport.attachments && (
-                  <div className="mb-6">
-                    <h3 className="font-semibold text-gray-900 mb-3">Хавсралт файлууд</h3>
-                    <div className="space-y-2">
-                      {selectedReport.attachments.map((file: string, index: number) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                          <div className="flex items-center gap-3">
-                            <FiPaperclip className="text-blue-600" />
-                            <span className="text-sm text-gray-700">{file}</span>
-                          </div>
-                          <button className="p-2 hover:bg-gray-200 rounded-lg transition">
-                            <FiDownload className="text-gray-600" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Review Section UI - Static */}
+                {/* Review Section */}
                 <div className="border-t border-gray-200 pt-6">
                   <h3 className="font-semibold text-gray-900 mb-4">Тайланд хариу өгөх</h3>
                   
-                  {/* Feedback */}
+                  {/* Feedback Input */}
                   <div className="mb-4">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <FiMessageSquare className="inline mr-2" />
                       Санал шүүмж
                     </label>
                     <textarea
-                      rows={3}
+                      rows={4}
                       placeholder="Оюутанд хандаж санал шүүмжээ бичнэ үү..."
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
-                      defaultValue={selectedReport.status === "approved" ? "Тайлан сайн байна. Баталгаажууллаа." : 
-                                   selectedReport.status === "rejected" ? "Тайлангийн агуулга хангалтгүй байна. Дахин бичиж илгээнэ үү." : ""}
-                      readOnly
+                      value={feedbackText}
+                      onChange={(e) => setFeedbackText(e.target.value)}
+                      disabled={selectedReport.status !== "pending" || submitting}
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500"
                     />
                   </div>
 
-                  
-
                   {/* Action Buttons */}
-                  <div className="flex gap-3">
-                    <button className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl font-semibold opacity-60 cursor-not-allowed flex items-center justify-center gap-2">
-                      <FiCheckCircle />
-                      Баталгаажуулах
-                    </button>
-                    <button className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl font-semibold opacity-60 cursor-not-allowed flex items-center justify-center gap-2">
-                      <FiXCircle />
-                      Татгалзах
-                    </button>
-                  </div>
-                </div>
-
-                {/* Review Info */}
-                {selectedReport.status !== "pending" && (
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-600">Хянасан багш:</span>
-                        <span className="font-medium text-gray-900">Г. Батбаяр</span>
-                      </div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-600">Хянасан огноо:</span>
-                        <span className="font-medium text-gray-900">2026-02-23 14:30</span>
-                      </div>
-                      
+                  {selectedReport.status === "pending" && (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleApprove}
+                        disabled={submitting}
+                        className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submitting ? (
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <FiCheckCircle />
+                        )}
+                        Баталгаажуулах
+                      </button>
+                      <button
+                        onClick={handleReject}
+                        disabled={submitting}
+                        className="flex-1 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {submitting ? (
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <FiXCircle />
+                        )}
+                        Татгалзах
+                      </button>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {/* Review Info for reviewed reports */}
+                  {selectedReport.status !== "pending" && selectedReport.feedback && (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm text-gray-600">Хянасан багш:</span>
+                          <span className="font-medium text-gray-900">{teacherInfo?.name || "Та"}</span>
+                        </div>
+                        {selectedReport.reviewed_at && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-gray-600">Хянасан огноо:</span>
+                            <span className="font-medium text-gray-900">{new Date(selectedReport.reviewed_at).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="mt-3 p-3 bg-white rounded-lg">
+                          <p className="text-sm text-gray-700">{selectedReport.feedback}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </motion.div>
             ) : (
               <div className="bg-white rounded-2xl p-12 shadow-xl border border-gray-200 text-center">
@@ -400,24 +774,10 @@ export default function TeacherReviewPage() {
                   <FiFileText className="text-3xl text-blue-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-700 mb-2">Тайлан сонгоогүй байна</h3>
-                <p className="text-gray-500 mb-4">Зүүн талаас хянах тайлангаа сонгоно уу</p>
-                <div className="flex justify-center gap-2 text-sm text-gray-400">
-                  <span className="flex items-center gap-1"><FiClock /> Хүлээгдэж буй: 12</span>
-                  <span className="flex items-center gap-1"><FiCheckCircle /> Баталгаажсан: 8</span>
-                </div>
+                <p className="text-gray-500">Зүүн талаас хянах тайлангаа сонгоно уу</p>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Pagination */}
-        <div className="flex justify-center gap-2 mt-8">
-          <button className="w-10 h-10 bg-[#0f172a] text-white rounded-xl">1</button>
-          <button className="w-10 h-10 border border-gray-200 rounded-xl hover:bg-gray-50 transition">2</button>
-          <button className="w-10 h-10 border border-gray-200 rounded-xl hover:bg-gray-50 transition">3</button>
-          <button className="w-10 h-10 border border-gray-200 rounded-xl hover:bg-gray-50 transition">4</button>
-          <span className="w-10 h-10 flex items-center justify-center">...</span>
-          <button className="w-10 h-10 border border-gray-200 rounded-xl hover:bg-gray-50 transition">10</button>
         </div>
       </div>
     </div>

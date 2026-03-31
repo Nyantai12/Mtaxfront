@@ -1,8 +1,9 @@
 // app/student/tax-report/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback, useRef, ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   FiSave,
   FiSend,
@@ -32,8 +33,8 @@ interface Field {
 }
 
 interface Section {
-  title: ReactNode;
   id: string;
+  title: string;
   fields: Field[];
   columns?: any[];
 }
@@ -283,8 +284,11 @@ export default function TaxReportPage() {
   const recalculateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputFocusRef = useRef<{ [key: string]: boolean }>({});
   const tempInputValueRef = useRef<{ [key: string]: string }>({});
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const reportIdFromUrl = params.id as string;
+  const orgId = searchParams.get("org_id");
 
-  // ✅ ШИНЭ: report_id-г ref-д хадгалах — stale closure-оос сэргийлнэ
   const reportIdRef = useRef<number | undefined>(undefined);
 
   const [studentInfo, setStudentInfo] = useState({ id: "", name: "" });
@@ -303,11 +307,6 @@ export default function TaxReportPage() {
     report_name: "",
   });
 
-  // ✅ formData.report_id өөрчлөгдөх бүрт ref-г шинэчлэх
-  useEffect(() => {
-    reportIdRef.current = formData.report_id;
-  }, [formData.report_id]);
-
   useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
@@ -324,14 +323,17 @@ export default function TaxReportPage() {
 
     fetchTeachers();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const reportId = urlParams.get("id");
-    if (reportId) {
-      fetchReportData(parseInt(reportId));
+    if (reportIdFromUrl) {
+      const parsedId = parseInt(reportIdFromUrl);
+      if (!isNaN(parsedId)) {
+        reportIdRef.current = parsedId;
+        setFormData((prev) => ({ ...prev, report_id: parsedId }));
+        fetchReportData(parsedId);
+      }
     } else {
       initializeValues();
     }
-  }, []);
+  }, [reportIdFromUrl]);
 
   const fetchReportData = async (reportId: number) => {
     setIsLoadingReport(true);
@@ -364,14 +366,10 @@ export default function TaxReportPage() {
           }
         }
 
-        // ✅ report_id-г ref-д шууд хадгалах
-        reportIdRef.current = report.report_id;
-
         setFormData((prev) => ({
           ...prev,
           values: { ...reportValues },
-          report_id: report.report_id,
-          is_draft: true,
+          report_id: reportId,
           report_name: report.type_name || "",
         }));
 
@@ -402,17 +400,17 @@ export default function TaxReportPage() {
   const fetchTeachers = async () => {
     setIsLoadingTeachers(true);
     try {
-      const response = await fetch(
-        "http://localhost:8000/api/users/teachers/",
-        {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      const response = await fetch("http://localhost:8000/api/user/teacher/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
       const data = await response.json();
-      if (data.resultCode === 7920 && data.data) {
+
+      if (data.resultCode === 7630 && data.data) {
         setTeachers(data.data);
+      } else {
+        console.error("API Error:", data.resultMessage);
       }
     } catch (error) {
       console.error("Багш нар татахад алдаа:", error);
@@ -446,8 +444,7 @@ export default function TaxReportPage() {
           : rawValue;
       }
       const value = formData.values[fieldId];
-      if (value === undefined || value === null || value === "")
-        return "0.00 ₮";
+      if (value === undefined || value === null || value === "") return "0.00 ₮";
       return formatAsMoney(value);
     },
     [formData.values]
@@ -486,9 +483,7 @@ export default function TaxReportPage() {
           if (field.children?.length) collectCalculatedFields(field.children);
         }
       };
-      collectCalculatedFields(
-        reportStructure.sections.flatMap((s) => s.fields)
-      );
+      collectCalculatedFields(reportStructure.sections.flatMap((s) => s.fields));
       for (let i = 0; i < 5; i++) {
         for (const field of calculatedFields) {
           if (field.calculationRule) {
@@ -568,41 +563,71 @@ export default function TaxReportPage() {
     return allFields;
   }, []);
 
-  const showSuccessNotification = (message: string, subMessage?: string) => {
-    const successDiv = document.createElement("div");
-    successDiv.className = "fixed top-4 right-4 z-50";
-    successDiv.innerHTML = `
-      <div class="bg-green-50 border border-green-200 rounded-xl p-4 shadow-lg">
+  const showNotification = (message: string, type: "success" | "error") => {
+    const bgColor = type === "success" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200";
+    const textColor = type === "success" ? "text-green-800" : "text-red-800";
+    const iconColor = type === "success" ? "text-green-600" : "text-red-600";
+    const icon = type === "success" 
+      ? '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>'
+      : '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+    
+    const notificationDiv = document.createElement("div");
+    notificationDiv.className = "fixed top-4 right-4 z-50 animate-slide-in";
+    notificationDiv.innerHTML = `
+      <div class="${bgColor} border rounded-xl p-4 shadow-lg">
         <div class="flex items-center gap-3">
-          <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-          </svg>
+          <div class="${iconColor}">${icon}</div>
           <div>
-            <p class="text-green-800 font-medium">${message}</p>
-            ${subMessage ? `<p class="text-green-600 text-sm mt-1">${subMessage}</p>` : ""}
+            <p class="${textColor} font-medium">${message}</p>
           </div>
         </div>
       </div>
     `;
-    document.body.appendChild(successDiv);
-    setTimeout(() => successDiv.remove(), 5000);
+    document.body.appendChild(notificationDiv);
+    setTimeout(() => notificationDiv.remove(), 5000);
   };
 
-  // ✅ ЗАСВАРЛАСАН saveReport — reportIdRef ашиглан үргэлж зөв ID уншина
+  const handleSaveError = (data: any) => {
+    if (data.resultCode === 7824) {
+      setSubmitError("Method буруу. Зөвхөн POST хүсэлт илгээнэ үү.");
+    } else if (data.resultCode === 7825) {
+      setSubmitError("Хүсэлтийн бие (body) JSON форматтай биш байна.");
+    } else if (data.resultCode === 7826) {
+      setSubmitError("report_data хоосон байна.");
+    } else if (data.resultCode === 7822) {
+      setSubmitError("Мэдээллийн сангийн алдаа гарлаа.");
+    } else if (data.resultCode === 7823) {
+      setSubmitError("Серверийн алдаа гарлаа.");
+    } else if (data.resultCode === 8213) {
+      setSubmitError("Токен хүчингүй эсвэл хугацаа нь дууссан. Дахин нэвтэрнэ үү.");
+      setTimeout(() => router.push("/login"), 2000);
+    } else {
+      setSubmitError(data.resultMessage || `Алдаа гарлаа (Код: ${data.resultCode})`);
+    }
+  };
+
   const saveReport = async (isDraft: boolean = false) => {
     if (!isDraft && !selectedTeacher) {
       setSubmitError("Тайлан илгээх багшаа сонгоно уу");
       return;
     }
 
-    if (isDraft) setIsSavingDraft(true);
-    else setIsSubmitting(true);
+    const currentReportId = reportIdRef.current;
+    if (!currentReportId) {
+      setSubmitError("Тайлангийн ID олдсонгүй. URL дээр id= параметр шаардлагатай.");
+      return;
+    }
+
+    if (isDraft) {
+      setIsSavingDraft(true);
+    } else {
+      setIsSubmitting(true);
+    }
     setSubmitError("");
 
     try {
       const allFields = getAllFields();
 
-      // Хадгалах утгуудыг бэлтгэх
       const valuesToSave: Record<string, string> = {};
       for (const field of allFields) {
         const value = formData.values[field.id];
@@ -615,112 +640,82 @@ export default function TaxReportPage() {
             : num.toString();
       }
 
-      // ✅ ГОЛ ЗАСВАР: ref-ээс report_id-г уншина — хэзээ ч stale болохгүй
-      const currentReportId = reportIdRef.current;
+      const savePayload = { report_data: valuesToSave };
 
-      console.log("Одоогийн report_id (ref-ээс):", currentReportId);
+      console.log("1. savereportfields хүсэлт:", {
+        report_id: currentReportId,
+        payload: savePayload,
+      });
 
-      let response: Response;
-
-      if (currentReportId) {
-        // ✅ ҮРГЭЛЖ UPDATE — URL дээр id байвал эсвэл өмнө хадгалсан бол
-        const payload = { report_data: valuesToSave };
-        console.log("UPDATE хүсэлт:", { report_id: currentReportId, payload });
-
-        response = await fetch(
-          `http://localhost:8000/api/report/savereportfields/${currentReportId}/`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify(payload),
-          }
-        );
-      } else {
-        // INSERT — зөвхөн шинэ тайлан үүсгэх үед
-        const nonCalculatedValues: Record<string, string> = {};
-        for (const field of allFields) {
-          if (!field.isCalculated) {
-            const value = formData.values[field.id];
-            const num = parseFloat(value);
-            nonCalculatedValues[field.id] =
-              value === undefined || value === null || value === ""
-                ? "0"
-                : isNaN(num)
-                ? "0"
-                : num.toString();
-          }
+      const saveResponse = await fetch(
+        `http://localhost:8000/api/report/savereportfields/${currentReportId}/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(savePayload),
         }
+      );
 
-        const payload = {
-          student_id: parseInt(formData.student_id),
-          report_type_id: formData.report_type_id,
-          tax_period_year: formData.tax_period_year,
-          tax_period_month: formData.tax_period_month,
-          values: nonCalculatedValues,
-          teacher_id: selectedTeacher?.id,
-          is_draft: isDraft,
-        };
+      const saveData = await saveResponse.json();
+      console.log("savereportfields хариу:", saveData);
 
-        console.log("INSERT хүсэлт:", payload);
-
-        response = await fetch(
-          "http://localhost:8000/api/report/addsubmission/",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify(payload),
-          }
-        );
+      if (isDraft) {
+        if (saveData.resultCode === 7820 || saveData.resultCode === 7220) {
+          showNotification("Тайлан ноорог хэлбэрээр амжилттай хадгалагдлаа.", "success");
+          setSubmitSuccess(true);
+          setTimeout(() => setSubmitSuccess(false), 5000);
+        } else {
+          handleSaveError(saveData);
+        }
+        setIsSavingDraft(false);
+        return;
       }
 
-      const data = await response.json();
-      console.log("Серверийн хариу:", data);
+      if (saveData.resultCode !== 7820 && saveData.resultCode !== 7220) {
+        handleSaveError(saveData);
+        setIsSubmitting(false);
+        return;
+      }
 
-      if (data.resultCode === 7820 || data.resultCode === 7220) {
-        // ✅ Шинэ тайлан үүсгэсэн бол report_id-г ref болон state-д хадгалах
-        if (!currentReportId && data.data?.report_id) {
-          reportIdRef.current = data.data.report_id;
-          setFormData((prev) => ({
-            ...prev,
-            report_id: data.data.report_id,
-          }));
-          console.log("Шинэ report_id хадгалагдлаа:", data.data.report_id);
+      const submissionPayload = {
+        report_id: currentReportId,
+        teacher_id: selectedTeacher?.id,
+      };
+
+      console.log("2. addsubmission хүсэлт:", submissionPayload);
+
+      const submissionResponse = await fetch(
+        "http://localhost:8000/api/report/addsubmission/",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(submissionPayload),
         }
+      );
 
-        const successMessage = isDraft
-          ? "Тайлан ноорог хэлбэрээр амжилттай хадгалагдлаа."
-          : "Тайлан амжилттай илгээгдлээ.";
+      const submissionData = await submissionResponse.json();
+      console.log("addsubmission хариу:", submissionData);
 
+      if (submissionData.resultCode === 6120) {
+        showNotification("Тайлан амжилттай илгээгдлээ.", "success");
         setSubmitSuccess(true);
-        showSuccessNotification(
-          successMessage,
-          isDraft ? "Та дараа нь нэвтэрч үргэлжлүүлж бөглөх боломжтой." : undefined
-        );
         setTimeout(() => setSubmitSuccess(false), 5000);
-
-        if (!isDraft) {
-          setTimeout(() => router.push("/student/reports"), 2000);
-        }
-      } else if (data.resultCode === 7824) {
-        setSubmitError("Method буруу. Зөвхөн POST хүсэлт илгээнэ үү.");
-      } else if (data.resultCode === 7825) {
-        setSubmitError("Хүсэлтийн бие (body) JSON форматтай биш байна.");
-      } else if (data.resultCode === 7826) {
-        setSubmitError("report_data хоосон байна.");
-      } else if (data.resultCode === 7822) {
+        setTimeout(() => router.push("/student/reports"), 2000);
+      } else if (submissionData.resultCode === 6121) {
+        setSubmitError("Шаардлагатай талбарууд дутуу байна.");
+      } else if (submissionData.resultCode === 6122) {
         setSubmitError("Мэдээллийн сангийн алдаа гарлаа.");
-      } else if (data.resultCode === 7823) {
+      } else if (submissionData.resultCode === 6123) {
         setSubmitError("Серверийн алдаа гарлаа.");
-      } else if (data.resultCode === 8213) {
-        setSubmitError(
-          "Токен хүчингүй эсвэл хугацаа нь дууссан байна. Дахин нэвтэрнэ үү."
-        );
-        setTimeout(() => router.push("/login"), 2000);
+      } else if (submissionData.resultCode === 6124) {
+        setSubmitError("Method буруу. Зөвхөн POST хүсэлт илгээнэ үү.");
+      } else if (submissionData.resultCode === 6125) {
+        setSubmitError("Хүсэлтийн бие (body) JSON форматтай биш байна.");
       } else {
         setSubmitError(
-          data.resultMessage || `Алдаа гарлаа (Код: ${data.resultCode})`
+          submissionData.resultMessage || `Алдаа гарлаа (Код: ${submissionData.resultCode})`
         );
       }
     } catch (error: any) {
@@ -810,45 +805,31 @@ export default function TaxReportPage() {
       <Header />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-          <Link
-            href="/student/dashboard"
-            className="hover:text-blue-600 flex items-center gap-1"
-          >
-            <FiHome className="text-sm" />
-            Нүүр
+          <Link href="/student/dashboard" className="hover:text-blue-600 flex items-center gap-1">
+            <FiHome className="text-sm" /> Нүүр
           </Link>
           <span>/</span>
-          <Link
-            href="/student/reports"
-            className="hover:text-blue-600 flex items-center gap-1"
-          >
-            <FiFileText className="text-sm" />
-            Тайлангууд
+          <Link href="/student/reports" className="hover:text-blue-600 flex items-center gap-1">
+            <FiFileText className="text-sm" /> Тайлангууд
           </Link>
           <span>/</span>
           <span className="text-gray-900 font-medium">
-            {formData.report_id
-              ? `Тайлан засварлах${formData.report_name ? ` - ${formData.report_name}` : ""}`
-              : "Татварын тайлан"}
+            {formData.report_name ? `Тайлан засварлах - ${formData.report_name}` : "Татварын тайлан"}
           </span>
         </div>
 
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              {formData.report_id ? "Тайлан засварлах" : "Татварын тайлангийн маягт"}
+              Татварын тайлангийн маягт
             </h1>
             <p className="text-gray-600 mt-1 flex items-center gap-2">
               <FaGraduationCap className="text-blue-600" />
               {studentInfo.name} - {studentInfo.id}
-              {formData.report_id && (
-                <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-                  Ноорог
-                </span>
-              )}
+              <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
+                Ноорог
+              </span>
             </p>
           </div>
 
@@ -858,10 +839,7 @@ export default function TaxReportPage() {
               <select
                 value={formData.tax_period_year}
                 onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    tax_period_year: parseInt(e.target.value),
-                  }))
+                  setFormData((prev) => ({ ...prev, tax_period_year: parseInt(e.target.value) }))
                 }
                 className="border-none focus:ring-0 text-sm bg-transparent text-gray-900"
               >
@@ -873,14 +851,11 @@ export default function TaxReportPage() {
               <select
                 value={formData.tax_period_month}
                 onChange={(e) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    tax_period_month: parseInt(e.target.value),
-                  }))
+                  setFormData((prev) => ({ ...prev, tax_period_month: parseInt(e.target.value) }))
                 }
                 className="border-none focus:ring-0 text-sm bg-transparent text-gray-900"
               >
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((month) => (
+                {[1,2,3,4,5,6,7,8,9,10,11,12].map((month) => (
                   <option key={month} value={month}>{month} сар</option>
                 ))}
               </select>
@@ -888,7 +863,15 @@ export default function TaxReportPage() {
           </div>
         </div>
 
-        {/* Багш сонгох */}
+        {!reportIdRef.current && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-700">
+            <FiAlertCircle className="text-xl flex-shrink-0" />
+            <span>
+              Тайлангийн ID олдсонгүй. Тайлан жагсаалтаас тайлан дээрээ дарж орно уу.
+            </span>
+          </div>
+        )}
+
         <div className="mb-6">
           {!showTeacherList ? (
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-5">
@@ -904,14 +887,11 @@ export default function TaxReportPage() {
                     <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center font-bold text-lg">
-                          {selectedTeacher.first_name?.charAt(0) ||
-                            selectedTeacher.email?.charAt(0).toUpperCase() ||
-                            "Б"}
+                          {selectedTeacher.first_name?.charAt(0) || selectedTeacher.email?.charAt(0).toUpperCase() || "Б"}
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900">
-                            {selectedTeacher.last_name}{" "}
-                            {selectedTeacher.first_name}
+                            {selectedTeacher.last_name} {selectedTeacher.first_name}
                           </p>
                           <p className="text-sm text-gray-500 flex items-center gap-1">
                             <FiUser className="text-xs" />
@@ -932,9 +912,7 @@ export default function TaxReportPage() {
                       className="w-full md:w-96 px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl text-left text-gray-500 hover:border-blue-400 hover:bg-blue-50 transition flex items-center gap-3 group"
                     >
                       <FiUser className="text-gray-400 group-hover:text-blue-500" />
-                      <span className="group-hover:text-blue-600">
-                        Багш сонгоно уу...
-                      </span>
+                      <span className="group-hover:text-blue-600">Багш сонгоно уу...</span>
                     </button>
                   )}
                 </div>
@@ -950,17 +928,14 @@ export default function TaxReportPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-gray-900">Багш сонгох</h3>
-                      <p className="text-sm text-gray-500">
-                        Нийт {teachers.length} багш бүртгэлтэй
-                      </p>
+                      <p className="text-sm text-gray-500">Нийт {teachers.length} багш бүртгэлтэй</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowTeacherList(false)}
                     className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 transition flex items-center gap-1"
                   >
-                    <FiArrowLeft />
-                    Буцах
+                    <FiArrowLeft /> Буцах
                   </button>
                 </div>
               </div>
@@ -984,10 +959,7 @@ export default function TaxReportPage() {
                         whileHover={{ scale: 1.02 }}
                         onClick={() => {
                           setSelectedTeacher(teacher);
-                          setFormData((prev) => ({
-                            ...prev,
-                            teacher_id: teacher.id,
-                          }));
+                          setFormData((prev) => ({ ...prev, teacher_id: teacher.id }));
                           setShowTeacherList(false);
                         }}
                         className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
@@ -998,17 +970,13 @@ export default function TaxReportPage() {
                       >
                         <div className="flex items-start gap-3">
                           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
-                            {teacher.first_name?.charAt(0) ||
-                              teacher.email?.charAt(0).toUpperCase() ||
-                              "Б"}
+                            {teacher.first_name?.charAt(0) || teacher.email?.charAt(0).toUpperCase() || "Б"}
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="font-semibold text-gray-900 truncate">
                               {teacher.last_name} {teacher.first_name}
                             </h4>
-                            <p className="text-sm text-gray-500 truncate">
-                              {teacher.email}
-                            </p>
+                            <p className="text-sm text-gray-500 truncate">{teacher.email}</p>
                           </div>
                           {selectedTeacher?.id === teacher.id && (
                             <FiCheckCircle className="text-green-500 flex-shrink-0" />
@@ -1023,7 +991,6 @@ export default function TaxReportPage() {
           )}
         </div>
 
-        {/* Alerts */}
         <AnimatePresence>
           {submitSuccess && (
             <motion.div
@@ -1049,7 +1016,6 @@ export default function TaxReportPage() {
           )}
         </AnimatePresence>
 
-        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {summaryValues.map((item, index) => (
             <motion.div
@@ -1068,19 +1034,17 @@ export default function TaxReportPage() {
           ))}
         </div>
 
-        {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
             onClick={resetAllValues}
             className="px-4 py-2 bg-white border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
           >
-            <FiRefreshCw />
-            Бүгдийг 0 болгох
+            <FiRefreshCw /> Бүгдийг 0 болгох
           </button>
 
           <button
             onClick={() => saveReport(true)}
-            disabled={isSavingDraft}
+            disabled={isSavingDraft || !reportIdRef.current}
             className="px-5 py-2 bg-white border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSavingDraft ? (
@@ -1090,15 +1054,14 @@ export default function TaxReportPage() {
               </>
             ) : (
               <>
-                <FiSave />
-                Ноорог хадгалах
+                <FiSave /> Ноорог хадгалах
               </>
             )}
           </button>
 
           <button
             onClick={() => saveReport(false)}
-            disabled={isSubmitting || !selectedTeacher}
+            disabled={isSubmitting || !selectedTeacher || !reportIdRef.current}
             className="px-6 py-2 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
           >
             {isSubmitting ? (
@@ -1108,14 +1071,12 @@ export default function TaxReportPage() {
               </>
             ) : (
               <>
-                <FiSend />
-                Тайлан илгээх
+                <FiSend /> Тайлан илгээх
               </>
             )}
           </button>
         </div>
 
-        {/* Report Sections */}
         <div className="space-y-6">
           {reportStructure.sections.map((section, sectionIndex) => (
             <motion.div
@@ -1145,10 +1106,8 @@ export default function TaxReportPage() {
         <div className="mt-8 text-center text-xs text-gray-400">
           <p>Тооцоолол автоматаар шинэчлэгдэнэ. Цэнхэр мөрүүд нь томьёотой мөрүүд.</p>
           <p className="mt-1">Бүх дүнг MNT (төгрөг)-өөр бөглөнө үү.</p>
-          {formData.report_id && (
-            <p className="mt-2 text-blue-500">
-              Тайлан ID: {formData.report_id}
-            </p>
+          {reportIdRef.current && (
+            <p className="mt-2 text-blue-500">Тайлан ID: {reportIdRef.current}</p>
           )}
         </div>
       </div>
