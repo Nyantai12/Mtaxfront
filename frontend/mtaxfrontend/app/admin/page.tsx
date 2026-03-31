@@ -17,6 +17,7 @@ import {
   FiCalendar,
   FiDownload,
   FiMoreVertical,
+  FiHome,
 } from "react-icons/fi";
 import {
   BarChart,
@@ -134,6 +135,9 @@ export default function AdminDashboard() {
           </div>
 
           <nav className="space-y-2">
+            <Link href="/" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
+              <FiHome /> Нүүр хуудас
+            </Link>
             <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl">
               <FiBarChart2 /> Хянах самбар
             </Link>

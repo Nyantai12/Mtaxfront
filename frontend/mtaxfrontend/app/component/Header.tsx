@@ -17,6 +17,9 @@ import {
   FiBriefcase,
   FiCheck,
   FiAlertCircle,
+  FiUsers,
+  FiBarChart2,
+  FiShield,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 
@@ -26,6 +29,8 @@ interface UserData {
   user_role: string;
   first_name: string;
   last_name: string;
+  is_admin?: boolean;
+  role?: string; // Нэмэлт role талбар
 }
 
 interface Organization {
@@ -54,14 +59,27 @@ export default function Header() {
       if (userData) {
         try {
           const parsedUser = JSON.parse(userData);
-          setUser(parsedUser);
+          console.log("User data from localStorage:", parsedUser); // Debug log
           
-          // Load organizations if user is logged in
-          fetchOrganizations();
+          // Админ эсэхийг шалгах олон хувилбарыг шалгах
+          const isUserAdmin = 
+            parsedUser.is_admin === true || 
+            parsedUser.user_role?.toLowerCase() === "admin" ||
+            parsedUser.role?.toLowerCase() === "admin";
+          
+          setUser({
+            ...parsedUser,
+            is_admin: isUserAdmin
+          });
+          
+          // Load organizations if user is logged in and not admin
+          if (!isUserAdmin) {
+            fetchOrganizations();
+          }
           
           // Load selected organization from localStorage
           const savedOrg = localStorage.getItem("selectedOrganization");
-          if (savedOrg) {
+          if (savedOrg && !isUserAdmin) {
             setSelectedOrg(JSON.parse(savedOrg));
           }
         } catch (e) {
@@ -102,7 +120,7 @@ export default function Header() {
     try {
       const response = await fetch("https://bmtax.mandakh.org/api/organization/organizationlist/", {
         method: "GET",
-        credentials: "include", // To include cookies
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -237,19 +255,56 @@ export default function Header() {
     return user?.email?.charAt(0).toUpperCase() || "Х";
   };
 
-  const getRoleIcon = () => {
-    if (user?.user_role?.toLowerCase() === "teacher" || user?.user_role?.toLowerCase() === "bagsh") {
-      return <FaChalkboardTeacher className="text-blue-600" />;
-    }
-    return <FaGraduationCap className="text-green-600" />;
+  // Админ эсэхийг тодорхойлох функц
+  const isAdmin = () => {
+    if (!user) return false;
+    
+    // Олон төрлийн админ шалгалтууд
+    const adminCheck = 
+      user.is_admin === true || 
+      user.user_role?.toLowerCase() === "admin" ||
+      user.role?.toLowerCase() === "admin";
+    
+    console.log("Admin check:", {
+      is_admin: user.is_admin,
+      user_role: user.user_role,
+      role: user.role,
+      result: adminCheck
+    });
+    
+    return adminCheck;
   };
 
-  const getRoleName = () => {
-    if (user?.user_role?.toLowerCase() === "teacher" || user?.user_role?.toLowerCase() === "bagsh") {
-      return "Багш";
-    }
-    return "Оюутан";
-  };
+  // getRoleIcon removed here; use the single implementation defined later (includes additional role checks)
+
+  // components/Header.tsx - getRoleName функц
+const getRoleName = () => {
+  if (isAdmin()) {
+    return "Админ";
+  }
+  // Багшийн эрхийг зөв харуулах
+  if (user?.user_role?.toLowerCase() === "teacher" || 
+      user?.user_role?.toLowerCase() === "bagsh" ||
+      user?.user_role?.toLowerCase() === "professor") {
+    return "Багш";
+  }
+  return "Оюутан";
+};
+
+const getRoleIcon = () => {
+  if (isAdmin()) {
+    return <FiShield className="text-purple-600" />;
+  }
+  // Багшийн icon-г зөв харуулах
+  if (user?.user_role?.toLowerCase() === "teacher" || 
+      user?.user_role?.toLowerCase() === "bagsh" ||
+      user?.user_role?.toLowerCase() === "professor") {
+    return <FaChalkboardTeacher className="text-blue-600" />;
+  }
+  return <FaGraduationCap className="text-green-600" />;
+};
+
+  const adminStatus = isAdmin();
 
   return (
     <>
@@ -280,8 +335,8 @@ export default function Header() {
             </div>
           </Link>
 
-          {/* Organization Selector - Only for logged in users */}
-          {user && organizations.length > 0 && (
+          {/* Organization Selector - Only for non-admin logged in users */}
+          {user && organizations.length > 0 && !adminStatus && (
             <div className="hidden md:block relative mx-4">
               <button
                 onClick={() => setIsOrgMenuOpen(!isOrgMenuOpen)}
@@ -343,7 +398,7 @@ export default function Header() {
             >
               Нүүр
             </Link>
-            {user && (
+            {user && !adminStatus && (
               <>
                 <Link
                   href="/teacher/reviews/"
@@ -354,17 +409,46 @@ export default function Header() {
                 </Link>
                 {user.user_role?.toLowerCase() === "teacher" && (
                   <Link
-                    href="/teacher/reviews/"
+                    href="/teacher/students/"
                     className="px-4 py-2 text-gray-700 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium flex items-center gap-2"
                   >
-                    <FiUser />
+                    <FiUsers />
                     Оюутнууд
                   </Link>
                 )}
               </>
             )}
+            
+            {/* Admin Navigation Links */}
+            {adminStatus && (
+              <>
+                <Link
+                  href="/admin/"
+                  className="px-4 py-2 text-gray-700 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition font-medium flex items-center gap-2"
+                >
+                  <FiBarChart2 />
+                  Самбар
+                </Link>
+                <Link
+                  href="/admin/users"
+                  className="px-4 py-2 text-gray-700 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition font-medium flex items-center gap-2"
+                >
+                  <FiUsers />
+                  Хэрэглэгчид
+                </Link>
+              
+                <Link
+                  href="/admin/reports"
+                  className="px-4 py-2 text-gray-700 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition font-medium flex items-center gap-2"
+                >
+                  <FiFileText />
+                  Тайлангууд
+                </Link>
+              </>
+            )}
+            
             <Link
-              href="/student/select-organization/"
+              href="/about"
               className="px-4 py-2 text-gray-700 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium"
             >
               Бидний тухай
@@ -375,19 +459,27 @@ export default function Header() {
           <div className="flex items-center gap-4">
             {user ? (
               <>
-                {/* Notification Bell (Optional) */}
-                <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">
-                  <FiBell className="text-xl" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
+                {/* Notification Bell (Optional) - Only for non-admin users */}
+                {!adminStatus && (
+                  <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">
+                    <FiBell className="text-xl" />
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  </button>
+                )}
 
                 {/* User Menu */}
                 <div className="relative">
                   <button
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="flex items-center gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-full pl-2 pr-4 py-1 hover:shadow-md transition group"
+                    className={`flex items-center gap-3 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-full pl-2 pr-4 py-1 hover:shadow-md transition group ${
+                      adminStatus ? "border-purple-200 hover:border-purple-300" : ""
+                    }`}
                   >
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#0f172a] to-[#1e3a8a] text-white flex items-center justify-center font-semibold text-sm">
+                    <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${
+                      adminStatus 
+                        ? "from-purple-600 to-purple-800" 
+                        : "from-[#0f172a] to-[#1e3a8a]"
+                    } text-white flex items-center justify-center font-semibold text-sm`}>
                       {getUserInitials()}
                     </div>
                     <div className="hidden lg:block text-left">
@@ -428,8 +520,8 @@ export default function Header() {
                           <p className="text-xs text-gray-400 mt-1">{user.email}</p>
                         </div>
 
-                        {/* Organizations - Mobile */}
-                        {organizations.length > 0 && (
+                        {/* Organizations - Mobile (Only for non-admin users) */}
+                        {!adminStatus && organizations.length > 0 && (
                           <div className="lg:hidden px-4 py-3 border-b border-gray-100">
                             <p className="text-xs text-gray-500 mb-2">Байгууллагууд</p>
                             {organizations.map((org) => (
@@ -461,23 +553,54 @@ export default function Header() {
                         )}
 
                         {/* Menu Items */}
-                        <Link
-                          href="/student/profile"
-                          className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
-                          onClick={() => setIsMenuOpen(false)}
-                        >
-                          <FiUser className="text-gray-400" />
-                          <span>Хувийн мэдээлэл</span>
-                        </Link>
-
-                        <Link
-                          href="/settings"
-                          className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
-                          onClick={() => setIsMenuOpen(false)}
-                        >
-                          <FiSettings className="text-gray-400" />
-                          <span>Тохиргоо</span>
-                        </Link>
+                        {adminStatus ? (
+                          <>
+                            <Link
+                              href="/admin/"
+                              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 transition"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <FiBarChart2 className="text-gray-400" />
+                              <span>Админ самбар</span>
+                            </Link>
+                            <Link
+                              href="/admin/users"
+                              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 transition"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <FiUsers className="text-gray-400" />
+                              <span>Хэрэглэгчид</span>
+                            </Link>
+                            
+                            <Link
+                              href="/admin/reports"
+                              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 transition"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <FiFileText className="text-gray-400" />
+                              <span>Тайлангууд</span>
+                            </Link>
+                          </>
+                        ) : (
+                          <>
+                            <Link
+                              href="/student/profile"
+                              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <FiUser className="text-gray-400" />
+                              <span>Хувийн мэдээлэл</span>
+                            </Link>
+                            <Link
+                              href="/settings"
+                              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              <FiSettings className="text-gray-400" />
+                              <span>Тохиргоо</span>
+                            </Link>
+                          </>
+                        )}
 
                         <hr className="my-2 border-gray-100" />
 
