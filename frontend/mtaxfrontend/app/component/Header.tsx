@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiUser,
@@ -20,6 +20,7 @@ import {
   FiUsers,
   FiBarChart2,
   FiShield,
+  FiBookOpen,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 
@@ -30,7 +31,7 @@ interface UserData {
   first_name: string;
   last_name: string;
   is_admin?: boolean;
-  role?: string; // Нэмэлт role талбар
+  role?: string;
 }
 
 interface Organization {
@@ -40,6 +41,8 @@ interface Organization {
 }
 
 export default function Header() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<UserData | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
@@ -50,7 +53,6 @@ export default function Header() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isScrolled, setIsScrolled] = useState(false);
-  const router = useRouter();
 
   // Check if user is logged in
   useEffect(() => {
@@ -59,9 +61,8 @@ export default function Header() {
       if (userData) {
         try {
           const parsedUser = JSON.parse(userData);
-          console.log("User data from localStorage:", parsedUser); // Debug log
+          console.log("User data from localStorage:", parsedUser);
           
-          // Админ эсэхийг шалгах олон хувилбарыг шалгах
           const isUserAdmin = 
             parsedUser.is_admin === true || 
             parsedUser.user_role?.toLowerCase() === "admin" ||
@@ -72,12 +73,10 @@ export default function Header() {
             is_admin: isUserAdmin
           });
           
-          // Load organizations if user is logged in and not admin
           if (!isUserAdmin) {
             fetchOrganizations();
           }
           
-          // Load selected organization from localStorage
           const savedOrg = localStorage.getItem("selectedOrganization");
           if (savedOrg && !isUserAdmin) {
             setSelectedOrg(JSON.parse(savedOrg));
@@ -93,17 +92,14 @@ export default function Header() {
       }
     };
 
-    // Initial check
     checkAuth();
 
-    // Listen for auth changes
     const handleAuthChange = () => {
       checkAuth();
     };
 
     window.addEventListener('auth-change', handleAuthChange);
     
-    // Scroll effect
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
     };
@@ -115,7 +111,6 @@ export default function Header() {
     };
   }, []);
 
-  // Fetch organizations list
   const fetchOrganizations = async () => {
     try {
       const response = await fetch("https://bmtax.mandakh.org/api/organization/organizationlist/", {
@@ -138,7 +133,6 @@ export default function Header() {
       if (data.resultCode === 7220 && data.data) {
         setOrganizations(data.data);
         
-        // If no organization is selected but there are organizations, select the first one
         if (!selectedOrg && data.data.length > 0) {
           setSelectedOrg(data.data[0]);
           localStorage.setItem("selectedOrganization", JSON.stringify(data.data[0]));
@@ -149,7 +143,6 @@ export default function Header() {
     }
   };
 
-  // Add new organization
   const handleAddOrganization = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -181,10 +174,8 @@ export default function Header() {
       }
 
       if (data.resultCode === 7320 && data.data && data.data.length > 0) {
-        // Success - refresh organizations list
         await fetchOrganizations();
         
-        // Select the new organization
         const newOrg = { 
           org_id: data.data[0].org_id, 
           org_name: newOrgName,
@@ -193,11 +184,9 @@ export default function Header() {
         setSelectedOrg(newOrg);
         localStorage.setItem("selectedOrganization", JSON.stringify(newOrg));
         
-        // Close modal and reset form
         setIsAddOrgModalOpen(false);
         setNewOrgName("");
         
-        // Dispatch event for other components
         window.dispatchEvent(new CustomEvent('organization-change', { detail: newOrg }));
       } else {
         throw new Error(data.resultMessage || "Алдаа гарлаа");
@@ -210,34 +199,24 @@ export default function Header() {
     }
   };
 
-  // Handle organization selection
   const handleSelectOrganization = (org: Organization) => {
     setSelectedOrg(org);
     localStorage.setItem("selectedOrganization", JSON.stringify(org));
     setIsOrgMenuOpen(false);
     
-    // Dispatch event for other components
     window.dispatchEvent(new CustomEvent('organization-change', { detail: org }));
-    
-    // Refresh the page or update data based on selected organization
     router.refresh();
   };
 
   const handleLogout = () => {
-    // Clear all user data from localStorage
     localStorage.removeItem("user");
     localStorage.removeItem("userRole");
     localStorage.removeItem("userId");
     localStorage.removeItem("token");
     localStorage.removeItem("selectedOrganization");
 
-    // Dispatch auth change event
     window.dispatchEvent(new Event('auth-change'));
-
-    // Close menu
     setIsMenuOpen(false);
-
-    // Redirect to home
     router.push("/");
   };
 
@@ -255,54 +234,40 @@ export default function Header() {
     return user?.email?.charAt(0).toUpperCase() || "Х";
   };
 
-  // Админ эсэхийг тодорхойлох функц
   const isAdmin = () => {
     if (!user) return false;
-    
-    // Олон төрлийн админ шалгалтууд
-    const adminCheck = 
-      user.is_admin === true || 
-      user.user_role?.toLowerCase() === "admin" ||
-      user.role?.toLowerCase() === "admin";
-    
-    console.log("Admin check:", {
-      is_admin: user.is_admin,
-      user_role: user.user_role,
-      role: user.role,
-      result: adminCheck
-    });
-    
-    return adminCheck;
+    return user.is_admin === true || 
+           user.user_role?.toLowerCase() === "admin" ||
+           user.role?.toLowerCase() === "admin";
   };
 
-  // getRoleIcon removed here; use the single implementation defined later (includes additional role checks)
+  const isStudent = () => {
+    if (!user || isAdmin()) return false;
+    const role = user.user_role?.toLowerCase();
+    return role === "student" || role === "оюутан";
+  };
 
-  // components/Header.tsx - getRoleName функц
-const getRoleName = () => {
-  if (isAdmin()) {
-    return "Админ";
-  }
-  // Багшийн эрхийг зөв харуулах
-  if (user?.user_role?.toLowerCase() === "teacher" || 
-      user?.user_role?.toLowerCase() === "bagsh" ||
-      user?.user_role?.toLowerCase() === "professor") {
-    return "Багш";
-  }
-  return "Оюутан";
-};
+  const isTeacher = () => {
+    if (!user || isAdmin()) return false;
+    const role = user.user_role?.toLowerCase();
+    return role === "teacher" || role === "багш" || role === "professor";
+  };
 
-const getRoleIcon = () => {
-  if (isAdmin()) {
-    return <FiShield className="text-purple-600" />;
-  }
-  // Багшийн icon-г зөв харуулах
-  if (user?.user_role?.toLowerCase() === "teacher" || 
-      user?.user_role?.toLowerCase() === "bagsh" ||
-      user?.user_role?.toLowerCase() === "professor") {
-    return <FaChalkboardTeacher className="text-blue-600" />;
-  }
-  return <FaGraduationCap className="text-green-600" />;
-};
+  const getRoleName = () => {
+    if (isAdmin()) return "Админ";
+    if (isTeacher()) return "Багш";
+    return "Оюутан";
+  };
+
+  const getRoleIcon = () => {
+    if (isAdmin()) return <FiShield className="text-purple-600" />;
+    if (isTeacher()) return <FaChalkboardTeacher className="text-blue-600" />;
+    return <FaGraduationCap className="text-green-600" />;
+  };
+
+  const isActive = (path: string) => {
+    return pathname === path;
+  };
 
   const adminStatus = isAdmin();
 
@@ -394,28 +359,68 @@ const getRoleIcon = () => {
           <nav className="hidden md:flex items-center gap-1">
             <Link
               href="/"
-              className="px-4 py-2 text-gray-700 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium"
+              className={`px-4 py-2 rounded-lg transition font-medium ${
+                isActive("/")
+                  ? "text-blue-600 bg-blue-50"
+                  : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+              }`}
             >
               Нүүр
             </Link>
-            {user && !adminStatus && (
+            
+            {/* Student Navigation */}
+            {user && isStudent() && (
+              <>
+                <Link
+                  href="/student/select-organization/"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/student/reports")
+                      ? "text-blue-600 bg-blue-50"
+                      : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  }`}
+                >
+                  <FiFileText />
+                  Тайлан илгээх
+                </Link>
+                <Link
+                  href="/student/reports"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/student/my-reports")
+                      ? "text-blue-600 bg-blue-50"
+                      : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  }`}
+                >
+                  <FiBookOpen />
+                  Миний тайлангууд
+                </Link>
+              </>
+            )}
+            
+            {/* Teacher Navigation */}
+            {user && isTeacher() && (
               <>
                 <Link
                   href="/teacher/reviews/"
-                  className="px-4 py-2 text-gray-700 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium flex items-center gap-2"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/teacher/review")
+                      ? "text-blue-600 bg-blue-50"
+                      : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  }`}
+                >
+                  <FaChalkboardTeacher />
+                  Тайлан хянах
+                </Link>
+                <Link
+                  href="/teacher/reviews/"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/teacher/reports")
+                      ? "text-blue-600 bg-blue-50"
+                      : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+                  }`}
                 >
                   <FiFileText />
-                  Тайлангууд
+                  Бүх тайлангууд
                 </Link>
-                {user.user_role?.toLowerCase() === "teacher" && (
-                  <Link
-                    href="/teacher/students/"
-                    className="px-4 py-2 text-gray-700 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium flex items-center gap-2"
-                  >
-                    <FiUsers />
-                    Оюутнууд
-                  </Link>
-                )}
               </>
             )}
             
@@ -424,22 +429,33 @@ const getRoleIcon = () => {
               <>
                 <Link
                   href="/admin/"
-                  className="px-4 py-2 text-gray-700 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition font-medium flex items-center gap-2"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/admin")
+                      ? "text-purple-600 bg-purple-50"
+                      : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
+                  }`}
                 >
                   <FiBarChart2 />
                   Самбар
                 </Link>
                 <Link
                   href="/admin/users"
-                  className="px-4 py-2 text-gray-700 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition font-medium flex items-center gap-2"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/admin/users")
+                      ? "text-purple-600 bg-purple-50"
+                      : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
+                  }`}
                 >
                   <FiUsers />
                   Хэрэглэгчид
                 </Link>
-              
                 <Link
                   href="/admin/reports"
-                  className="px-4 py-2 text-gray-700 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition font-medium flex items-center gap-2"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/admin/reports")
+                      ? "text-purple-600 bg-purple-50"
+                      : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
+                  }`}
                 >
                   <FiFileText />
                   Тайлангууд
@@ -449,7 +465,11 @@ const getRoleIcon = () => {
             
             <Link
               href="/about"
-              className="px-4 py-2 text-gray-700 hover:text-blue-600 rounded-lg hover:bg-blue-50 transition font-medium"
+              className={`px-4 py-2 rounded-lg transition font-medium ${
+                isActive("/about")
+                  ? "text-blue-600 bg-blue-50"
+                  : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
+              }`}
             >
               Бидний тухай
             </Link>
@@ -459,7 +479,7 @@ const getRoleIcon = () => {
           <div className="flex items-center gap-4">
             {user ? (
               <>
-                {/* Notification Bell (Optional) - Only for non-admin users */}
+                {/* Notification Bell */}
                 {!adminStatus && (
                   <button className="relative p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">
                     <FiBell className="text-xl" />
@@ -520,7 +540,7 @@ const getRoleIcon = () => {
                           <p className="text-xs text-gray-400 mt-1">{user.email}</p>
                         </div>
 
-                        {/* Organizations - Mobile (Only for non-admin users) */}
+                        {/* Organizations - Mobile */}
                         {!adminStatus && organizations.length > 0 && (
                           <div className="lg:hidden px-4 py-3 border-b border-gray-100">
                             <p className="text-xs text-gray-500 mb-2">Байгууллагууд</p>
@@ -571,7 +591,6 @@ const getRoleIcon = () => {
                               <FiUsers className="text-gray-400" />
                               <span>Хэрэглэгчид</span>
                             </Link>
-                            
                             <Link
                               href="/admin/reports"
                               className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 transition"
@@ -583,6 +602,46 @@ const getRoleIcon = () => {
                           </>
                         ) : (
                           <>
+                            {isStudent() && (
+                              <>
+                                <Link
+                                  href="/student/select-organization/"
+                                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
+                                  onClick={() => setIsMenuOpen(false)}
+                                >
+                                  <FiFileText className="text-gray-400" />
+                                  <span>Тайлан илгээх</span>
+                                </Link>
+                                <Link
+                                  href="/student/reports"
+                                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
+                                  onClick={() => setIsMenuOpen(false)}
+                                >
+                                  <FiBookOpen className="text-gray-400" />
+                                  <span>Миний тайлангууд</span>
+                                </Link>
+                              </>
+                            )}
+                            {isTeacher() && (
+                              <>
+                                <Link
+                                  href="/teacher/review"
+                                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
+                                  onClick={() => setIsMenuOpen(false)}
+                                >
+                                  <FaChalkboardTeacher className="text-gray-400" />
+                                  <span>Тайлан хянах</span>
+                                </Link>
+                                <Link
+                                  href="/teacher/reports"
+                                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
+                                  onClick={() => setIsMenuOpen(false)}
+                                >
+                                  <FiFileText className="text-gray-400" />
+                                  <span>Бүх тайлангууд</span>
+                                </Link>
+                              </>
+                            )}
                             <Link
                               href="/student/profile"
                               className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-blue-50 transition"
@@ -618,7 +677,6 @@ const getRoleIcon = () => {
               </>
             ) : (
               <>
-                {/* Auth Buttons for Non-logged in Users */}
                 <Link
                   href="/auth"
                   className="hidden md:block px-5 py-2 text-gray-700 hover:text-blue-600 font-medium transition"
