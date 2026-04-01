@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   FiUsers,
@@ -35,98 +35,298 @@ import {
 import Link from "next/link";
 import Header from "../component/Header";
 
+interface WeeklyReport {
+  day: string;
+  total: number;
+  name?: string;
+  count?: number;
+}
+
+interface ReportStatus {
+  name: string;
+  value: number;
+  color: string;
+}
+
+interface Student {
+  name: string;
+  reports: number;
+  avgGrade: number;
+}
+
+interface Activity {
+  user: string;
+  action: string;
+  time: string;
+  type: string;
+}
+
+interface Stat {
+  title: string;
+  value: number;
+  change: string;
+  icon: any;
+  color: string;
+}
+
 export default function AdminDashboard() {
   const [dateRange, setDateRange] = useState("week");
-
-  // Mock data
-  const stats = [
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReport[]>([]);
+  const [stats, setStats] = useState<Stat[]>([
     {
       title: "Нийт оюутан",
-      value: 548,
-      change: "+12",
+      value: 0,
+      change: "+0",
       icon: FiUsers,
       color: "bg-blue-500",
     },
     {
       title: "Нийт багш",
-      value: 48,
-      change: "+3",
+      value: 0,
+      change: "+0",
       icon: FiAward,
       color: "bg-green-500",
     },
     {
       title: "Нийт тайлан",
-      value: 1247,
-      change: "+156",
+      value: 0,
+      change: "+0",
       icon: FiFileText,
       color: "bg-purple-500",
     },
     {
       title: "Хүлээгдэж буй",
-      value: 23,
-      change: "-5",
+      value: 0,
+      change: "+0",
       icon: FiClock,
       color: "bg-yellow-500",
     },
-  ];
+  ]);
+  
+  const [reportStatus, setReportStatus] = useState<ReportStatus[]>([
+    { name: "Баталгаажсан", value: 0, color: "#10b981" },
+    { name: "Хүлээгдэж буй", value: 0, color: "#f59e0b" },
+    { name: "Хянаж буй", value: 0, color: "#3b82f6" },
+    { name: "Татгалзсан", value: 0, color: "#ef4444" },
+  ]);
+  
+  const [topStudents, setTopStudents] = useState<Student[]>([
+    { name: "Б. Мөнхжин", reports: 0, avgGrade: 0 },
+    { name: "С. Номин", reports: 0, avgGrade: 0 },
+    { name: "Д. Тэмүүлэн", reports: 0, avgGrade: 0 },
+    { name: "Э. Маралмаа", reports: 0, avgGrade: 0 },
+    { name: "Г. Ангирмаа", reports: 0, avgGrade: 0 },
+  ]);
+  
+  const [recentActivities, setRecentActivities] = useState<Activity[]>([
+    { user: "Б. Мөнхжин", action: "тайлан илгээсэн", time: "5 минутын өмнө", type: "submit" },
+    { user: "Г. Батбаяр багш", action: "тайлан баталгаажуулсан", time: "10 минутын өмнө", type: "approve" },
+    { user: "С. Номин", action: "тайлан илгээсэн", time: "15 минутын өмнө", type: "submit" },
+    { user: "Д. Энхтуяа багш", action: "тайланд татгалзсан", time: "25 минутын өмнө", type: "reject" },
+  ]);
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const weeklyReports = [
-    { name: "Даваа", count: 45 },
-    { name: "Мягмар", count: 52 },
-    { name: "Лхагва", count: 48 },
-    { name: "Пүрэв", count: 61 },
-    { name: "Баасан", count: 55 },
-    { name: "Бямба", count: 23 },
-    { name: "Ням", count: 12 },
-  ];
+  // Өдрийн нэрийг монгол хэлээр авах функц
+  const getDayName = (dateStr: string): string => {
+    const days = ["Ням", "Даваа", "Мягмар", "Лхагва", "Пүрэв", "Баасан", "Бямба"];
+    const date = new Date(dateStr);
+    return days[date.getDay()];
+  };
 
-  const reportStatus = [
-    { name: "Баталгаажсан", value: 856, color: "#10b981" },
-    { name: "Хүлээгдэж буй", value: 123, color: "#f59e0b" },
-    { name: "Хянаж буй", value: 234, color: "#3b82f6" },
-    { name: "Татгалзсан", value: 34, color: "#ef4444" },
-  ];
+  // Долоо хоногийн тайлангийн мэдээлэл татах
+  const fetchWeeklyReports = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/report/submittedreportscountlastweek/", {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
-  const topStudents = [
-    { name: "Б. Мөнхжин", reports: 24, avgGrade: 4.8 },
-    { name: "С. Номин", reports: 22, avgGrade: 4.9 },
-    { name: "Д. Тэмүүлэн", reports: 21, avgGrade: 4.7 },
-    { name: "Э. Маралмаа", reports: 20, avgGrade: 4.6 },
-    { name: "Г. Ангирмаа", reports: 19, avgGrade: 4.8 },
-  ];
+      const data = await response.json();
+      console.log("Долоо хоногийн тайлангийн мэдээлэл:", data);
 
-  const recentActivities = [
-    {
-      user: "Б. Мөнхжин",
-      action: "тайлан илгээсэн",
-      time: "5 минутын өмнө",
-      type: "submit",
-    },
-    {
-      user: "Г. Батбаяр багш",
-      action: "тайлан баталгаажуулсан",
-      time: "10 минутын өмнө",
-      type: "approve",
-    },
-    {
-      user: "С. Номин",
-      action: "тайлан илгээсэн",
-      time: "15 минутын өмнө",
-      type: "submit",
-    },
-    {
-      user: "Д. Энхтуяа багш",
-      action: "тайланд татгалзсан",
-      time: "25 минутын өмнө",
-      type: "reject",
-    },
-  ];
+      if (data.resultCode === 9010 && data.data) {
+        const formattedData = data.data.map((item: any) => ({
+          ...item,
+          name: getDayName(item.day),
+          count: item.total
+        }));
+        setWeeklyReports(formattedData);
+      } else {
+        setError(data.resultMessage || "Мэдээлэл ачаалахад алдаа гарлаа");
+      }
+    } catch (error) {
+      console.error("Мэдээлэл ачаалахад алдаа:", error);
+      setError("Сервертэй холбогдоход алдаа гарлаа");
+    }
+  };
+
+  // Нийт статистик мэдээлэл татах
+  const fetchStats = async () => {
+    try {
+      // Нийт оюутан
+      const studentsRes = await fetch("http://localhost:8000/api/report/totalstudents/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const studentsData = await studentsRes.json();
+      
+      // Нийт багш
+      const teachersRes = await fetch("http://localhost:8000/api/report/totalteachers/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const teachersData = await teachersRes.json();
+      
+      // Нийт тайлан
+      const reportsRes = await fetch("http://localhost:8000/api/report/totalreports/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const reportsData = await reportsRes.json();
+      
+      // Хүлээгдэж буй тайлан
+      const pendingRes = await fetch("http://localhost:8000/api/report/pendingreports/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const pendingData = await pendingRes.json();
+
+      setStats([
+        {
+          title: "Нийт оюутан",
+          value: studentsData.resultCode === 9010 ? studentsData.data?.total || 0 : 0,
+          change: "+0",
+          icon: FiUsers,
+          color: "bg-blue-500",
+        },
+        {
+          title: "Нийт багш",
+          value: teachersData.resultCode === 9010 ? teachersData.data?.total || 0 : 0,
+          change: "+0",
+          icon: FiAward,
+          color: "bg-green-500",
+        },
+        {
+          title: "Нийт тайлан",
+          value: reportsData.resultCode === 9010 ? reportsData.data?.total || 0 : 0,
+          change: "+0",
+          icon: FiFileText,
+          color: "bg-purple-500",
+        },
+        {
+          title: "Хүлээгдэж буй",
+          value: pendingData.resultCode === 9010 ? pendingData.data?.total || 0 : 0,
+          change: "+0",
+          icon: FiClock,
+          color: "bg-yellow-500",
+        },
+      ]);
+    } catch (error) {
+      console.error("Статистик мэдээлэл татахад алдаа:", error);
+    }
+  };
+
+  // Тайлангийн төлөв байдлын мэдээлэл татах
+  const fetchReportStatus = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/report/reportstatuscount/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      
+      if (data.resultCode === 9010 && data.data) {
+        setReportStatus([
+          { name: "Баталгаажсан", value: data.data.approved || 0, color: "#10b981" },
+          { name: "Хүлээгдэж буй", value: data.data.pending || 0, color: "#f59e0b" },
+          { name: "Хянаж буй", value: data.data.reviewed || 0, color: "#3b82f6" },
+          { name: "Татгалзсан", value: data.data.rejected || 0, color: "#ef4444" },
+        ]);
+      }
+    } catch (error) {
+      console.error("Тайлангийн төлөв татахад алдаа:", error);
+    }
+  };
+
+  // Шилдэг оюутнуудын мэдээлэл татах
+  const fetchTopStudents = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/report/topstudents/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      
+      if (data.resultCode === 9010 && data.data) {
+        setTopStudents(data.data);
+      }
+    } catch (error) {
+      console.error("Шилдэг оюутнууд татахад алдаа:", error);
+    }
+  };
+
+  // Сүүлийн үйлдлүүдийн мэдээлэл татах
+  const fetchRecentActivities = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/report/recentactivities/", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      
+      if (data.resultCode === 9010 && data.data) {
+        setRecentActivities(data.data);
+      }
+    } catch (error) {
+      console.error("Сүүлийн үйлдлүүд татахад алдаа:", error);
+    }
+  };
+
+  // Бүх мэдээллийг татах
+  const fetchAllData = async () => {
+    setLoading(true);
+    await Promise.all([
+      fetchWeeklyReports(),
+      fetchStats(),
+      fetchReportStatus(),
+      fetchTopStudents(),
+      fetchRecentActivities(),
+    ]);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex justify-center items-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       {/* Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-64 bg-gradient-to-b from-[#0f172a] to-[#1e3a8a] text-white">
+      <div className="fixed left-0 top-0 h-full w-56 bg-gradient-to-b from-[#0f172a] to-[#1e3a8a] text-white">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8 mt-15">
             
@@ -141,24 +341,21 @@ export default function AdminDashboard() {
             <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl ">
               <FiBarChart2 /> Хянах самбар
             </Link>
-            {/* <Link href="/admin/users" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
-              <FiUsers /> Хэрэглэгчид
-            </Link>
-            <Link href="/admin/reports" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
-              <FiFileText /> Тайлангууд
-            </Link>
-            <Link href="/admin/courses" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
-              <FiBookOpen /> Хичээлүүд
-            </Link>
-            <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-3 hover:bg-white/10 rounded-xl transition">
-              <FiSettings /> Тохиргоо
-            </Link> */}
           </nav>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="ml-64 p-8">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+            <FiAlertCircle className="text-xl flex-shrink-0" />
+            <span>{error}</span>
+            <button onClick={() => setError("")} className="ml-auto text-red-500 hover:text-red-700">×</button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -167,7 +364,11 @@ export default function AdminDashboard() {
           </div>
           
           <div className="flex gap-3">
-            <select className="px-4 py-2 border border-gray-200 rounded-xl bg-white">
+            <select 
+              className="px-4 py-2 border border-gray-200 rounded-xl bg-white"
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value)}
+            >
               <option value="week">7 хоног</option>
               <option value="month">Сар</option>
               <option value="year">Жил</option>
@@ -210,11 +411,19 @@ export default function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip 
+                  formatter={(value: any) => [`${value} тайлан`, 'Илгээсэн']}
+                  labelFormatter={(label) => `${label} гараг`}
+                />
                 <Legend />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Илгээсэн тайлан" />
               </BarChart>
             </ResponsiveContainer>
+            {weeklyReports.length > 0 && (
+              <div className="mt-4 text-center text-sm text-gray-500">
+                Нийт: {weeklyReports.reduce((sum, item) => sum + (item.count || 0), 0)} тайлан
+              </div>
+            )}
           </div>
 
           {/* Pie Chart */}
@@ -236,9 +445,14 @@ export default function AdminDashboard() {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value: any) => [`${value} тайлан`, 'Тоо']} />
               </PieChart>
             </ResponsiveContainer>
+            {reportStatus.reduce((sum, item) => sum + item.value, 0) > 0 && (
+              <div className="mt-4 text-center text-sm text-gray-500">
+                Нийт: {reportStatus.reduce((sum, item) => sum + item.value, 0)} тайлан
+              </div>
+            )}
           </div>
         </div>
 
@@ -300,32 +514,6 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
-
-        {/* System Status
-        <div className="mt-8 bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Системийн төлөв</h3>
-          <div className="grid grid-cols-4 gap-6">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Системийн ачаалал</p>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-green-500 h-2 rounded-full" style={{ width: '45%' }}></div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">45%</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Серверийн хариу үйлдэл</p>
-              <p className="font-medium text-gray-900">120ms</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Өнөөдрийн идэвхтэй хэрэглэгч</p>
-              <p className="font-medium text-gray-900">89</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Сануулах тайлан</p>
-              <p className="font-medium text-yellow-600">3</p>
-            </div>
-          </div>
-        </div> */}
       </div>
     </div>
   );

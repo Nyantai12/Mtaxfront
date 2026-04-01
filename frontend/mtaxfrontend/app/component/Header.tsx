@@ -372,9 +372,9 @@ export default function Header() {
             {user && isStudent() && (
               <>
                 <Link
-                  href="/student/select-organization/"
+                  href="/student/select-organization"
                   className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
-                    isActive("/student/reports")
+                    isActive("/student/select-organization")
                       ? "text-blue-600 bg-blue-50"
                       : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
                   }`}
@@ -385,7 +385,7 @@ export default function Header() {
                 <Link
                   href="/student/reports"
                   className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
-                    isActive("/student/my-reports")
+                    isActive("/student/reports")
                       ? "text-blue-600 bg-blue-50"
                       : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
                   }`}
@@ -400,9 +400,9 @@ export default function Header() {
             {user && isTeacher() && (
               <>
                 <Link
-                  href="/teacher/reviews/"
+                  href="/teacher/reviews"
                   className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
-                    isActive("/teacher/review")
+                    isActive("/teacher/reviews")
                       ? "text-blue-600 bg-blue-50"
                       : "text-gray-700 hover:text-blue-600 hover:bg-blue-50"
                   }`}
@@ -430,7 +430,7 @@ export default function Header() {
                 <Link
                   href="/admin/"
                   className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
-                    isActive("/admin")
+                    isActive("/admin/")
                       ? "text-purple-600 bg-purple-50"
                       : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
                   }`}

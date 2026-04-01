@@ -1,7 +1,7 @@
 // app/teacher/reviews/[id]/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, JSX } from "react";
 import { motion } from "framer-motion";
 import {
   FiArrowLeft,
@@ -156,7 +156,7 @@ const reportStructure: ReportData = {
         { id: "26", type: "number", label: "8. Зохицуулагдсан татвар ногдуулах орлогын дүн (24+25)", order: 26, result: "0.00", isCalculated: true, calculationRule: "24+25" },
         { id: "27", type: "number", label: "9. Өмнөх жилүүдийн татварын тайлангаар гарсан татварын албаар баталгаажуулсан алдагдлаас тайлант хугацаанд шилжүүлсэн дүн", order: 27, result: "0.00", isCalculated: false },
         { id: "28", type: "number", label: "10. Нийтлэг хувь хэмжээгээр татвар ногдуулах орлого (26-27)", order: 28, result: "0.00", isCalculated: true, calculationRule: "26-27" },
-        { id: "29", type: "number", label: "11. Ногдуулсан төлбөл зохих албан татвар (28 * 25%)", order: 29, result: "0.00", isCalculated: false },
+        { id: "29", type: "number", label: "11. Ногдуулсан төлбөл зохих албан татвар (28 * 25%)", order: 29, result: "0.00", isCalculated: true, calculationRule: "28 * 0.25" },
         { id: "30", type: "number", label: "12. Хуулийн 22.5, 22.9-д заасны дагуу хөнгөлөгдөх татвар", order: 30, result: "0.00", isCalculated: false },
         { id: "31", type: "number", label: "13. НИЙТЛЭГ ХУВЬ ХЭМЖЭЭГЭЭР НОГДУУЛСАН ТӨЛБӨЛ ЗОХИХ АЛБАН ТАТВАР (29-30)", order: 31, result: "0.00", isCalculated: true, calculationRule: "29-30" },
       ],
@@ -177,7 +177,7 @@ const reportStructure: ReportData = {
             { id: "34", type: "number", label: "Төрийн байгууллагад төлсөн төлбөр", order: 34, result: "0.00", isCalculated: false },
             { id: "35", type: "number", label: "Бусдаас худалдаж авахад төлсөн төлбөр", order: 35, result: "0.00", isCalculated: false },
             { id: "36", type: "number", label: "Татвар ногдуулах орлого (33-34-35)", order: 36, result: "0.00", isCalculated: true, calculationRule: "33-34-35" },
-            { id: "37", type: "number", label: "Ногдуулсан татвар (36 * 10%)", order: 37, result: "0.00", isCalculated: true, calculationRule: "36 * 10%" },
+            { id: "37", type: "number", label: "Ногдуулсан татвар (36 * 10%)", order: 37, result: "0.00", isCalculated: true, calculationRule: "36 * 0.10" },
           ],
         },
         { id: "38", type: "number", label: "16. Эрхийн шимтгэлийн орлого", order: 38, result: "0.00", isCalculated: false },
@@ -272,18 +272,60 @@ const getMonthName = (month: number): string => {
 };
 
 const getStatusBadge = (status: string) => {
-  switch(status) {
-    case "pending":
-      return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1"><FiClock /> Хүлээгдэж буй</span>;
-    case "reviewed":
-      return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1"><FiMessageSquare /> Хянаж буй</span>;
-    case "approved":
-      return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1"><FiCheckCircle /> Баталгаажсан</span>;
-    case "rejected":
-      return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Татгалзсан</span>;
-    default:
-      return <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">{status}</span>;
+  const statusMap: Record<string, { label: string; color: string; icon: JSX.Element }> = {
+    pending: { label: "Хүлээгдэж буй", color: "bg-yellow-100 text-yellow-700", icon: <FiClock /> },
+    reviewed: { label: "Хянаж буй", color: "bg-blue-100 text-blue-700", icon: <FiMessageSquare /> },
+    approved: { label: "Баталгаажсан", color: "bg-green-100 text-green-700", icon: <FiCheckCircle /> },
+    rejected: { label: "Татгалзсан", color: "bg-red-100 text-red-700", icon: <FiXCircle /> },
+  };
+  
+  const info = statusMap[status] || { label: status, color: "bg-gray-100 text-gray-700", icon: <FiClock /> };
+  
+  return (
+    <span className={`px-3 py-1 ${info.color} rounded-full text-xs font-medium flex items-center gap-1`}>
+      {info.icon} {info.label}
+    </span>
+  );
+};
+
+// Тооцоолол хийх функц
+const calculateField = (fieldId: string, values: Record<string, string>): number => {
+  const getValue = (id: string): number => {
+    const val = values[id];
+    if (!val || val === "") return 0;
+    const num = parseFloat(val);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const rules: Record<string, () => number> = {
+    "1": () => getValue("2") + getValue("3") + getValue("4") + getValue("5"),
+    "5": () => getValue("6") + getValue("7") + getValue("8") + getValue("9") + getValue("10") + 
+          getValue("11") + getValue("12") + getValue("13") + getValue("14") + getValue("15") + getValue("16"),
+    "17": () => getValue("18") + getValue("19") + getValue("20"),
+    "21": () => getValue("1") - getValue("17"),
+    "24": () => getValue("21") + getValue("22") - getValue("23"),
+    "26": () => getValue("24") + getValue("25"),
+    "28": () => getValue("26") - getValue("27"),
+    "29": () => getValue("28") * 0.25,
+    "31": () => getValue("29") - getValue("30"),
+    "32": () => getValue("33") + getValue("38") + getValue("39") + getValue("40") + getValue("41") + 
+            getValue("42") + getValue("44") + getValue("45") + getValue("47") + getValue("49"),
+    "36": () => getValue("33") - getValue("34") - getValue("35"),
+    "37": () => getValue("36") * 0.10,
+    "43": () => (getValue("38") + getValue("39") + getValue("40") + getValue("41") + getValue("42")) * 0.10,
+    "46": () => (getValue("44") + getValue("45")) * 0.05,
+    "48": () => getValue("47") * 0.02,
+    "50": () => getValue("49") * 0.40,
+    "51": () => getValue("37") + getValue("43") + getValue("46") + getValue("48") + getValue("50"),
+    "54": () => getValue("31") + getValue("51") - getValue("52") - getValue("53"),
+    "58": () => getValue("31") + getValue("51") - getValue("52") - getValue("53") - getValue("56") - getValue("57"),
+  };
+
+  if (rules[fieldId]) {
+    return rules[fieldId]();
   }
+  
+  return getValue(fieldId);
 };
 
 export default function TeacherReportViewPage() {
@@ -295,6 +337,7 @@ export default function TeacherReportViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportInfo | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [calculatedValues, setCalculatedValues] = useState<Record<string, number>>({});
   const [teacherName, setTeacherName] = useState<string>("");
 
   // Хэрэглэгчийн мэдээлэл авах
@@ -317,7 +360,7 @@ export default function TeacherReportViewPage() {
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:8000/api/report/${reportId}/`, {
+      const response = await fetch(`http://localhost:8000/api/report/teacherdetailreport/${reportId}/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -326,10 +369,12 @@ export default function TeacherReportViewPage() {
       const data = await response.json();
       console.log("Тайлангийн мэдээлэл:", data);
 
-      if (data.resultCode === 7520 && data.data) {
+      // resultCode 6140 эсвэл 7520 аль нэгийг шалгах
+      if ((data.resultCode === 6140 || data.resultCode === 7520) && data.data) {
         const reportData = data.data;
         let reportValues: Record<string, string> = {};
 
+        // report_data-г зөв боловсруулах
         if (reportData.report_data) {
           if (typeof reportData.report_data === "object") {
             reportValues = reportData.report_data;
@@ -339,6 +384,44 @@ export default function TeacherReportViewPage() {
             } catch (e) {
               console.error("JSON parse error:", e);
             }
+          }
+        }
+
+        // Тооцоолсон утгуудыг үүсгэх
+        const calculated: Record<string, number> = {};
+        const allFieldIds = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", 
+                             "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
+                             "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46",
+                             "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58"];
+        
+        allFieldIds.forEach(id => {
+          calculated[id] = calculateField(id, reportValues);
+        });
+
+        setValues(reportValues);
+        setCalculatedValues(calculated);
+
+        // Оюутны мэдээллийг бүрдүүлэх
+        let studentInfo: StudentInfo = {
+          id: reportData.student_id || 0,
+          first_name: "",
+          last_name: "",
+          email: reportData.student_email || "",
+          student_code: reportData.student_code,
+          department: reportData.department,
+        };
+
+        // Оюутны нэрийг зөв боловсруулах
+        if (reportData.student_first_name && reportData.student_last_name) {
+          studentInfo.first_name = reportData.student_first_name;
+          studentInfo.last_name = reportData.student_last_name;
+        } else if (reportData.student_name) {
+          const nameParts = reportData.student_name.split(" ");
+          if (nameParts.length >= 2) {
+            studentInfo.last_name = nameParts[0];
+            studentInfo.first_name = nameParts.slice(1).join(" ");
+          } else {
+            studentInfo.first_name = reportData.student_name;
           }
         }
 
@@ -357,16 +440,8 @@ export default function TeacherReportViewPage() {
           reviewed_at: reportData.reviewed_at,
           teacher_id: reportData.teacher_id,
           teacher_name: reportData.teacher_name,
-          student: {
-            id: reportData.student_id,
-            first_name: reportData.student_first_name || reportData.student_name?.split(" ")[1] || "",
-            last_name: reportData.student_last_name || reportData.student_name?.split(" ")[0] || "",
-            email: reportData.student_email || "",
-            student_code: reportData.student_code,
-            department: reportData.department,
-          },
+          student: studentInfo,
         });
-        setValues(reportValues);
       } else {
         setError(data.resultMessage || "Тайлангийн мэдээлэл олдсонгүй");
       }
@@ -380,21 +455,25 @@ export default function TeacherReportViewPage() {
 
   const getValue = useCallback(
     (fieldId: string): number => {
+      // Эхлээд тооцоолсон утгыг шалгах
+      if (calculatedValues[fieldId] !== undefined) {
+        return calculatedValues[fieldId];
+      }
+      // Хэрэв тооцоолсон утга байхгүй бол values-аас авах
       const value = values[fieldId];
       if (value === undefined || value === null || value === "") return 0;
       const num = Number(value);
       return isNaN(num) ? 0 : num;
     },
-    [values]
+    [values, calculatedValues]
   );
 
   const getDisplayValue = useCallback(
     (fieldId: string): string => {
-      const value = values[fieldId];
-      if (value === undefined || value === null || value === "") return "0.00 ₮";
+      const value = getValue(fieldId);
       return formatAsMoney(value);
     },
-    [values]
+    [getValue]
   );
 
   const renderFields = (fields: Field[], level: number = 0) => {
@@ -425,8 +504,8 @@ export default function TeacherReportViewPage() {
             </div>
             <div className="col-span-3">
               <div
-                className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-right text-gray-900 font-medium ${
-                  field.isCalculated ? "bg-blue-100/50" : "bg-gray-50"
+                className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-right font-medium ${
+                  field.isCalculated ? "bg-blue-100/50 text-blue-800" : "bg-gray-50 text-gray-900"
                 }`}
               >
                 {getDisplayValue(field.id)}
@@ -522,18 +601,18 @@ export default function TeacherReportViewPage() {
         {/* Navigation */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Link href="/teacher/dashboard" className="hover:text-blue-600 flex items-center gap-1">
+            <Link href="/" className="hover:text-blue-600 flex items-center gap-1">
               <FiHome className="text-sm" /> Нүүр
             </Link>
             <span>/</span>
-            <Link href="/teacher/review" className="hover:text-blue-600 flex items-center gap-1">
+            <Link href="/teacher/reviews" className="hover:text-blue-600 flex items-center gap-1">
               <FiFileText className="text-sm" /> Тайлан хянах
             </Link>
             <span>/</span>
             <span className="text-gray-900 font-medium">Тайлан харах</span>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 no-print">
             <button
               onClick={handleExport}
               className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition flex items-center gap-2 text-sm"
@@ -547,7 +626,7 @@ export default function TeacherReportViewPage() {
               <FiPrinter /> Хэвлэх
             </button>
             <button
-              onClick={() => router.push("/teacher/review")}
+              onClick={() => router.push("/teacher/reviews")}
               className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-200 transition flex items-center gap-2 text-sm"
             >
               <FiArrowLeft /> Буцах
@@ -744,6 +823,11 @@ export default function TeacherReportViewPage() {
             background: white;
             padding: 0;
             margin: 0;
+          }
+          .bg-gradient-to-r {
+            background: #0f172a !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
       `}</style>

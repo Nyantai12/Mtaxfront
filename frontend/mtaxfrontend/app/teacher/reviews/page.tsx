@@ -39,7 +39,8 @@ interface Report {
   type_id?: number;
   course?: string;
   submitted_at: string;
-  status: string;
+  report_status: string;  // API-аас ирэх статус
+  status: string;  // Фронтенд ашиглах статус
   content?: string;
   report_data?: any;
   attachments?: string[];
@@ -64,6 +65,36 @@ interface TeacherReportListItem {
   student_email?: string;
   student_name?: string;
 }
+
+// API статусыг фронтенд статус руу хөрвүүлэх
+const mapApiStatusToFrontend = (apiStatus: string): string => {
+  switch(apiStatus) {
+    case "Баталгаажсан":
+      return "approved";
+    case "Буцаасан":
+      return "rejected";
+    case "Хянаж буй":
+      return "reviewed";
+    case "Хүлээн авсан":
+      return "pending";
+    default:
+      return "pending";
+  }
+};
+
+// Фронтенд статусыг API статус руу хөрвүүлэх
+const mapStatusToApiFormat = (status: string): string => {
+  switch(status) {
+    case "approved":
+      return "Баталгаажсан";
+    case "rejected":
+      return "Буцаасан";
+    case "reviewed":
+      return "Хянаж буй";
+    default:
+      return "Хүлээн авсан";
+  }
+};
 
 export default function TeacherReviewPage() {
   const router = useRouter();
@@ -126,7 +157,6 @@ export default function TeacherReviewPage() {
           return;
         }
 
-        // Тайлан бүрийн дэлгэрэнгүй мэдээллийг тусад нь татах
         setLoadingReports(true);
         const detailedReports: Report[] = [];
         
@@ -145,6 +175,10 @@ export default function TeacherReviewPage() {
             
             if (detailData.resultCode === 7520 && detailData.data) {
               const report = detailData.data;
+              // API-аас ирсэн report_status-г ашиглах
+              const apiStatus = report.report_status || report.status || "Хүлээн авсан";
+              const frontendStatus = mapApiStatusToFrontend(apiStatus);
+              
               detailedReports.push({
                 id: report.report_id || item.report_id,
                 title: report.type_name || `Тайлан ${item.report_id}`,
@@ -157,7 +191,8 @@ export default function TeacherReviewPage() {
                 type_id: report.type_id,
                 course: report.course_name || "Хичээл",
                 submitted_at: report.created_at || report.submitted_at || new Date().toISOString(),
-                status: report.status || "pending",
+                report_status: apiStatus,  // API-аас ирсэн анхны статус
+                status: frontendStatus,    // Фронтенд ашиглах статус
                 content: report.content,
                 report_data: report.report_data,
                 attachments: report.attachments || [],
@@ -167,7 +202,6 @@ export default function TeacherReviewPage() {
                 feedback: report.feedback,
               });
             } else {
-              // Хэрэв дэлгэрэнгүй мэдээлэл авахгүй бол үндсэн мэдээллээр хийх
               detailedReports.push({
                 id: item.report_id,
                 title: `Тайлан ${item.report_id}`,
@@ -179,6 +213,7 @@ export default function TeacherReviewPage() {
                 type_name: "Тайлан",
                 course: "Хичээл",
                 submitted_at: new Date().toISOString(),
+                report_status: "Хүлээн авсан",
                 status: "pending",
                 report_data: null,
                 attachments: [],
@@ -186,7 +221,6 @@ export default function TeacherReviewPage() {
             }
           } catch (err) {
             console.error(`Тайлан ${item.report_id} дэлгэрэнгүй татахад алдаа:`, err);
-            // Алдаа гарсан ч үндсэн мэдээллээр нэмэх
             detailedReports.push({
               id: item.report_id,
               title: `Тайлан ${item.report_id}`,
@@ -198,6 +232,7 @@ export default function TeacherReviewPage() {
               type_name: "Тайлан",
               course: "Хичээл",
               submitted_at: new Date().toISOString(),
+              report_status: "Хүлээн авсан",
               status: "pending",
               report_data: null,
               attachments: [],
@@ -223,7 +258,7 @@ export default function TeacherReviewPage() {
     }
   };
 
-  // Тайлангийн дэлгэрэнгүй мэдээлэл татах (сонгосон үед)
+  // Тайлангийн дэлгэрэнгүй мэдээлэл татах
   const fetchReportDetail = async (reportId: number) => {
     try {
       const response = await fetch(`http://localhost:8000/api/report/${reportId}/`, {
@@ -235,7 +270,6 @@ export default function TeacherReviewPage() {
       });
 
       const data = await response.json();
-      console.log("Тайлангийн дэлгэрэнгүй:", data);
 
       if (data.resultCode === 7520 && data.data) {
         const reportDetail = data.data;
@@ -246,6 +280,7 @@ export default function TeacherReviewPage() {
           attachments: reportDetail.attachments || [],
           feedback: reportDetail.feedback,
           student_email: reportDetail.student_email || prev?.student_email || "",
+          report_status: reportDetail.report_status || prev?.report_status || "Хүлээн авсан",
         }));
         
         if (reportDetail.feedback) {
@@ -264,42 +299,76 @@ export default function TeacherReviewPage() {
     fetchReportDetail(report.id);
   };
 
+  // Тайлан баталгаажуулах / татгалзах
+  const updateReportStatus = async (reportId: number, status: string, feedback: string) => {
+    const apiStatus = mapStatusToApiFormat(status);
+    const requestBody = {
+      report_status: apiStatus,
+      feedback: feedback,
+    };
+    
+    console.log(`Илгээж буй өгөгдөл:`, requestBody);
+    
+    const response = await fetch(`http://localhost:8000/api/report/teachereditreportstatus/${reportId}/`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    const data = await response.json();
+    console.log("Статус шинэчлэх хариу:", data);
+    return data;
+  };
+
   // Тайлан баталгаажуулах
   const handleApprove = async () => {
     if (!selectedReport) return;
     
     setSubmitting(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/report/review/${selectedReport.id}/`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: "approved",
-          feedback: feedbackText,
-        }),
-      });
-
-      const data = await response.json();
-      console.log("Баталгаажуулсан хариу:", data);
-
-      if (data.resultCode === 7820 || data.resultCode === 7220) {
-        setReports(prev => 
-          prev.map(r => 
-            r.id === selectedReport.id 
-              ? { ...r, status: "approved", feedback: feedbackText, reviewed_at: new Date().toISOString() }
-              : r
-          )
+      const data = await updateReportStatus(selectedReport.id, "approved", feedbackText);
+      
+      if (data.resultCode === 6150) {
+        const updatedReports = reports.map(r => 
+          r.id === selectedReport.id 
+            ? { 
+                ...r, 
+                status: "approved", 
+                report_status: "Баталгаажсан",
+                feedback: feedbackText, 
+                reviewed_at: new Date().toISOString(), 
+                teacher_name: teacherInfo?.name 
+              }
+            : r
         );
+        setReports(updatedReports);
+        
         setSelectedReport(prev => 
-          prev ? { ...prev, status: "approved", feedback: feedbackText } : null
+          prev ? { 
+            ...prev, 
+            status: "approved", 
+            report_status: "Баталгаажсан",
+            feedback: feedbackText, 
+            reviewed_at: new Date().toISOString(), 
+            teacher_name: teacherInfo?.name 
+          } : null
         );
         
         showNotification("Тайлан амжилттай баталгаажууллаа.", "success");
       } else {
-        setError(data.resultMessage || "Баталгаажуулахад алдаа гарлаа");
+        let errorMessage = "Баталгаажуулахад алдаа гарлаа";
+        if (data.resultCode === 6151) errorMessage = "Буруу хүсэлт";
+        if (data.resultCode === 6152) errorMessage = "Өгөгдлийн сангийн алдаа";
+        if (data.resultCode === 6153) errorMessage = "Серверийн алдаа";
+        if (data.resultCode === 6154) errorMessage = "Буруу хүсэлтийн метод";
+        if (data.resultCode === 6155) errorMessage = "JSON формат алдаатай";
+        if (data.resultCode === 6156) errorMessage = "report_status параметр байхгүй";
+        if (data.resultCode === 8213) errorMessage = "Хэрэглэгчийн эрх баталгаажаагүй байна";
+        
+        setError(errorMessage);
       }
     } catch (error) {
       console.error("Баталгаажуулахад алдаа:", error);
@@ -320,36 +389,46 @@ export default function TeacherReviewPage() {
     
     setSubmitting(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/report/review/${selectedReport.id}/`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: "rejected",
-          feedback: feedbackText,
-        }),
-      });
-
-      const data = await response.json();
-      console.log("Татгалзсан хариу:", data);
-
-      if (data.resultCode === 7820 || data.resultCode === 7220) {
-        setReports(prev => 
-          prev.map(r => 
-            r.id === selectedReport.id 
-              ? { ...r, status: "rejected", feedback: feedbackText, reviewed_at: new Date().toISOString() }
-              : r
-          )
+      const data = await updateReportStatus(selectedReport.id, "rejected", feedbackText);
+      
+      if (data.resultCode === 6150) {
+        const updatedReports = reports.map(r => 
+          r.id === selectedReport.id 
+            ? { 
+                ...r, 
+                status: "rejected", 
+                report_status: "Буцаасан",
+                feedback: feedbackText, 
+                reviewed_at: new Date().toISOString(), 
+                teacher_name: teacherInfo?.name 
+              }
+            : r
         );
+        setReports(updatedReports);
+        
         setSelectedReport(prev => 
-          prev ? { ...prev, status: "rejected", feedback: feedbackText } : null
+          prev ? { 
+            ...prev, 
+            status: "rejected", 
+            report_status: "Буцаасан",
+            feedback: feedbackText, 
+            reviewed_at: new Date().toISOString(), 
+            teacher_name: teacherInfo?.name 
+          } : null
         );
         
         showNotification("Тайлан татгалзлаа.", "error");
       } else {
-        setError(data.resultMessage || "Татгалзахад алдаа гарлаа");
+        let errorMessage = "Татгалзахад алдаа гарлаа";
+        if (data.resultCode === 6151) errorMessage = "Буруу хүсэлт";
+        if (data.resultCode === 6152) errorMessage = "Өгөгдлийн сангийн алдаа";
+        if (data.resultCode === 6153) errorMessage = "Серверийн алдаа";
+        if (data.resultCode === 6154) errorMessage = "Буруу хүсэлтийн метод";
+        if (data.resultCode === 6155) errorMessage = "JSON формат алдаатай";
+        if (data.resultCode === 6156) errorMessage = "report_status параметр байхгүй";
+        if (data.resultCode === 8213) errorMessage = "Хэрэглэгчийн эрх баталгаажаагүй байна";
+        
+        setError(errorMessage);
       }
     } catch (error) {
       console.error("Татгалзахад алдаа:", error);
@@ -383,18 +462,25 @@ export default function TeacherReviewPage() {
     setTimeout(() => notificationDiv.remove(), 3000);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, reportStatus?: string) => {
+    // Хэрэв reportStatus байвал түүнийг харуулах
+    const displayStatus = reportStatus || 
+      (status === "approved" ? "Баталгаажсан" :
+       status === "rejected" ? "Буцаасан" :
+       status === "reviewed" ? "Хянаж буй" :
+       status === "pending" ? "Хүлээгдэж буй" : "Хүлээгдэж буй");
+    
     switch(status) {
       case "pending":
-        return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1"><FiClock /> Хүлээгдэж буй</span>;
+        return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1"><FiClock /> {displayStatus}</span>;
       case "reviewed":
-        return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1"><FiEye /> Хянаж буй</span>;
+        return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1"><FiEye /> {displayStatus}</span>;
       case "approved":
-        return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1"><FiCheckCircle /> Баталгаажсан</span>;
+        return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1"><FiCheckCircle /> {displayStatus}</span>;
       case "rejected":
-        return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Татгалзсан</span>;
+        return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> {displayStatus}</span>;
       default:
-        return <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">{status}</span>;
+        return <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">{displayStatus}</span>;
     }
   };
 
@@ -427,34 +513,7 @@ export default function TeacherReviewPage() {
       <Header />
       
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-          <Link href="/teacher/dashboard" className="hover:text-blue-600 flex items-center gap-1">
-            <FiArrowLeft className="text-sm" />
-            Дашборд
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">Тайлан хянах</span>
-        </div>
-
-        {/* Teacher Info */}
-        {teacherInfo && (
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                {teacherInfo.first_name?.charAt(0) || teacherInfo.name?.charAt(0) || 'Б'}
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">{teacherInfo.name}</h2>
-                <p className="text-gray-500 flex items-center gap-1">
-                  <FiUser className="text-sm" />
-                  {teacherInfo.email}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
+        
         {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
@@ -612,7 +671,7 @@ export default function TeacherReviewPage() {
                       </p>
                       <p className="text-xs text-gray-400">{report.student_id}</p>
                     </div>
-                    {getStatusBadge(report.status)}
+                    {getStatusBadge(report.status, report.report_status)}
                   </div>
                   
                   <div className="flex items-center gap-4 text-xs text-gray-500">
@@ -658,7 +717,7 @@ export default function TeacherReviewPage() {
                       </span>
                     </div>
                   </div>
-                  {getStatusBadge(selectedReport.status)}
+                  {getStatusBadge(selectedReport.status, selectedReport.report_status)}
                 </div>
 
                 {/* Course Info */}
@@ -675,37 +734,32 @@ export default function TeacherReviewPage() {
                   </div>
                 </div>
 
-                {/* Report Content - JSONB өгөгдлийг харуулах */}
+                {/* Report Content */}
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-900 mb-3 text-lg">
                     Тайлангийн агуулга
                   </h3>
-                <div
-                  onClick={() => router.push(`/teacher/reviews/${selectedReport.id}`)}
-                  className="relative bg-white rounded-2xl p-5 shadow-md border border-gray-100 
-                            hover:shadow-lg transition-all duration-300 cursor-pointer"
-                >
-                  {/* Top gradient accent */}
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r 
-                                  from-indigo-500 via-purple-500 to-pink-500 rounded-t-2xl" />
+                  <div
+                    onClick={() => router.push(`/teacher/reviews/${selectedReport.id}`)}
+                    className="relative bg-white rounded-2xl p-5 shadow-md border border-gray-100 
+                              hover:shadow-lg transition-all duration-300 cursor-pointer"
+                  >
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r 
+                                    from-indigo-500 via-purple-500 to-pink-500 rounded-t-2xl" />
 
-                  {/* Content */}
-                  <div className="mt-2 space-y-3">
-                    <h3 className="text-xl font-semibold text-gray-900 line-clamp-2">
-                      {selectedReport.title}
-                    </h3>
+                    <div className="mt-2 space-y-3">
+                      <h3 className="text-xl font-semibold text-gray-900 line-clamp-2">
+                        {selectedReport.title}
+                      </h3>
 
-                    {/* Divider */}
-                    <div className="border-t border-gray-100 my-2" />
+                      <div className="border-t border-gray-100 my-2" />
 
-                    {/* Scrollable content area */}
-                    <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[250px] overflow-y-auto text-sm leading-relaxed">
-                      {selectedReport.content || "Тайлангийн дэлгэрэнгүй харах..."}
+                      <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[250px] overflow-y-auto text-sm leading-relaxed">
+                        {selectedReport.content || "Тайлангийн дэлгэрэнгүй харах..."}
+                      </div>
                     </div>
-                  </div>
+                  </div>    
                 </div>    
-                </div>    
-
 
                 {/* Review Section */}
                 <div className="border-t border-gray-200 pt-6">
@@ -763,7 +817,7 @@ export default function TeacherReviewPage() {
                       <div className="bg-gray-50 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm text-gray-600">Хянасан багш:</span>
-                          <span className="font-medium text-gray-900">{teacherInfo?.name || "Та"}</span>
+                          <span className="font-medium text-gray-900">{selectedReport.teacher_name || teacherInfo?.name || "Та"}</span>
                         </div>
                         {selectedReport.reviewed_at && (
                           <div className="flex items-center justify-between mb-2">
