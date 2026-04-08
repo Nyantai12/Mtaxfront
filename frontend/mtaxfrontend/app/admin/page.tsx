@@ -165,25 +165,68 @@ export default function AdminDashboard() {
     }
   };
 
-  // Нийт статистик мэдээлэл татах
-  const fetchStats = async () => {
+  // ★ Хэрэглэгчийн жагсаалтаас оюутан, багш нарын тоог тоолох
+  const fetchUsersStats = async () => {
     try {
-      // Нийт оюутан
-      const studentsRes = await fetch("http://localhost:8000/api/report/totalstudents/", {
+      const response = await fetch("http://localhost:8000/api/user/userlist/", {
         method: "GET",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
-      const studentsData = await studentsRes.json();
-      
-      // Нийт багш
-      const teachersRes = await fetch("http://localhost:8000/api/report/totalteachers/", {
-        method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-      const teachersData = await teachersRes.json();
-      
+
+      const data = await response.json();
+      console.log("Хэрэглэгчийн жагсаалт:", data);
+
+      let usersList: any[] = [];
+      if (data.resultCode === 7620 && data.data) {
+        usersList = data.data;
+      } else if (Array.isArray(data)) {
+        usersList = data;
+      } else if (data.data && Array.isArray(data.data)) {
+        usersList = data.data;
+      }
+
+      // Рольоор ялгаж тоолох
+      const studentCount = usersList.filter((user: any) => {
+        const role = user.role?.toLowerCase();
+        return role === "student" || role === "oyutan" || role === "user";
+      }).length;
+
+      const teacherCount = usersList.filter((user: any) => {
+        const role = user.role?.toLowerCase();
+        return role === "teacher" || role === "bagsh";
+      }).length;
+
+      const adminCount = usersList.filter((user: any) => {
+        const role = user.role?.toLowerCase();
+        return role === "admin" || role === "administrator";
+      }).length;
+
+      console.log(`Тооллого: Оюутан=${studentCount}, Багш=${teacherCount}, Админ=${adminCount}`);
+
+      // Stats-ийг шинэчлэх
+      setStats(prev => prev.map(stat => {
+        if (stat.title === "Нийт оюутан") {
+          return { ...stat, value: studentCount };
+        }
+        if (stat.title === "Нийт багш") {
+          return { ...stat, value: teacherCount };
+        }
+        return stat;
+      }));
+
+      return { studentCount, teacherCount, adminCount };
+    } catch (error) {
+      console.error("Хэрэглэгчийн мэдээлэл татахад алдаа:", error);
+      return { studentCount: 0, teacherCount: 0, adminCount: 0 };
+    }
+  };
+
+  // Нийт тайлангийн статистик мэдээлэл татах
+  const fetchReportStats = async () => {
+    try {
       // Нийт тайлан
       const reportsRes = await fetch("http://localhost:8000/api/report/totalreports/", {
         method: "GET",
@@ -200,38 +243,17 @@ export default function AdminDashboard() {
       });
       const pendingData = await pendingRes.json();
 
-      setStats([
-        {
-          title: "Нийт оюутан",
-          value: studentsData.resultCode === 9010 ? studentsData.data?.total || 0 : 0,
-          change: "+0",
-          icon: FiUsers,
-          color: "bg-blue-500",
-        },
-        {
-          title: "Нийт багш",
-          value: teachersData.resultCode === 9010 ? teachersData.data?.total || 0 : 0,
-          change: "+0",
-          icon: FiAward,
-          color: "bg-green-500",
-        },
-        {
-          title: "Нийт тайлан",
-          value: reportsData.resultCode === 9010 ? reportsData.data?.total || 0 : 0,
-          change: "+0",
-          icon: FiFileText,
-          color: "bg-purple-500",
-        },
-        {
-          title: "Хүлээгдэж буй",
-          value: pendingData.resultCode === 9010 ? pendingData.data?.total || 0 : 0,
-          change: "+0",
-          icon: FiClock,
-          color: "bg-yellow-500",
-        },
-      ]);
+      setStats(prev => prev.map(stat => {
+        if (stat.title === "Нийт тайлан") {
+          return { ...stat, value: reportsData.resultCode === 9010 ? reportsData.data?.total || 0 : 0 };
+        }
+        if (stat.title === "Хүлээгдэж буй") {
+          return { ...stat, value: pendingData.resultCode === 9010 ? pendingData.data?.total || 0 : 0 };
+        }
+        return stat;
+      }));
     } catch (error) {
-      console.error("Статистик мэдээлэл татахад алдаа:", error);
+      console.error("Тайлангийн статистик татахад алдаа:", error);
     }
   };
 
@@ -299,7 +321,8 @@ export default function AdminDashboard() {
     setLoading(true);
     await Promise.all([
       fetchWeeklyReports(),
-      fetchStats(),
+      fetchUsersStats(),
+      fetchReportStats(),
       fetchReportStatus(),
       fetchTopStudents(),
       fetchRecentActivities(),
@@ -329,7 +352,6 @@ export default function AdminDashboard() {
       <div className="fixed left-0 top-0 h-full w-56 bg-gradient-to-b from-[#0f172a] to-[#1e3a8a] text-white">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-8 mt-15">
-            
             <div>
               <h2 className="font-bold text-xl">Админ самбар</h2>
               <p className="text-xs text-blue-200">Мандах ИС</p>
@@ -337,10 +359,10 @@ export default function AdminDashboard() {
           </div>
 
           <nav className="space-y-2">
-            
             <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-white/10 rounded-xl ">
               <FiBarChart2 /> Хянах самбар
             </Link>
+            
           </nav>
         </div>
       </div>
@@ -380,7 +402,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {stats.map((stat, index) => (
             <motion.div
               key={index}
@@ -395,14 +417,14 @@ export default function AdminDashboard() {
                 </div>
                 <span className="text-green-500 text-sm font-medium">{stat.change}</span>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900">{stat.value}</h3>
+              <h3 className="text-2xl font-bold text-gray-900">{stat.value.toLocaleString()}</h3>
               <p className="text-gray-600 text-sm">{stat.title}</p>
             </motion.div>
           ))}
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Bar Chart */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">7 хоногийн тайлангийн ирц</h3>
@@ -457,10 +479,10 @@ export default function AdminDashboard() {
         </div>
 
         {/* Tables */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top Students */}
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Оюутнууд</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Шилдэг оюутнууд</h3>
             <div className="space-y-3">
               {topStudents.map((student, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">

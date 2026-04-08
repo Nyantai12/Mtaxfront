@@ -284,7 +284,7 @@ export default function AuthPage() {
                           value={formData.last_name}
                           onChange={handleInputChange}
                           placeholder="Баттулга"
-                          className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none"
+                          className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
                           disabled={isLoading}
                           required={!isLogin}
                         />
@@ -300,7 +300,7 @@ export default function AuthPage() {
                           value={formData.first_name}
                           onChange={handleInputChange}
                           placeholder="Мөнхжин"
-                          className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none"
+                          className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
                           disabled={isLoading}
                           required={!isLogin}
                         />
@@ -310,16 +310,16 @@ export default function AuthPage() {
                 )}
 
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Имэйл</label>
+                  <label className="text-sm font-medium text-black">Имэйл</label>
                   <div className="relative mt-2">
-                    <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-black" />
                     <input
                       type="email"
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
                       placeholder="example@mandakh.edu.mn"
-                      className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none"
+                      className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
                       disabled={isLoading}
                       required
                     />
@@ -336,7 +336,7 @@ export default function AuthPage() {
                       value={formData.password}
                       onChange={handleInputChange}
                       placeholder="••••••••"
-                      className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none"
+                      className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
                       disabled={isLoading}
                       required
                     />

@@ -68,7 +68,7 @@ export default function StudentMyReportsPage() {
   // Статусыг маппинг хийх функц
   const mapStatus = (status: string): string => {
     switch(status) {
-      case "Илгээсэн":
+      case "Хүлээгдэж буй":
         return "pending";
       case "Хянаж буй":
         return "reviewed";
@@ -148,8 +148,8 @@ export default function StudentMyReportsPage() {
             if (detailData.resultCode === 7520 && detailData.data) {
               const report = detailData.data;
               // API-аас ирсэн статусыг маппинг хийх
-              const mappedStatus = mapStatus(item.current_status || report.status || "Илгээсэн");
-              
+              const mappedStatus = mapStatus(item.current_status || report.status || "Хүлээгдэж буй");
+
               detailedReports.push({
                 id: report.report_id || item.report_id,
                 title: report.type_name || item.type_name || `Тайлан ${item.report_id}`,
@@ -399,7 +399,7 @@ export default function StudentMyReportsPage() {
                   placeholder="Тайлангийн нэр, байгууллагаар хайх..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-black"
                 />
               </div>
             </div>
