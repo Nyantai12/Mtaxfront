@@ -15,7 +15,7 @@ import {
 } from "react-icons/fi";
 import Header from "../../component/Header";
 import { useRouter } from "next/navigation";
-
+import { API_BASE_URL } from "@/app/api/page";
 interface Organization {
   org_id: number;
   org_name: string;
@@ -28,7 +28,6 @@ interface ApiResponse {
   data: Organization[];
 }
 
-const API_BASE_URL = "http://localhost:8000";
 
 export default function SelectOrganizationPage() {
   const router = useRouter();

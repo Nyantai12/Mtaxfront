@@ -15,33 +15,20 @@ import {
   FiArrowLeft,
   FiHome,
   FiFileText,
+  FiLock,
 } from "react-icons/fi";
 import { FaChalkboardTeacher, FaGraduationCap } from "react-icons/fa";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/app/component/Header";
-
-interface Field {
-  id: string;
-  type: string;
-  label: string;
-  order: number;
-  result: string;
-  isCalculated?: boolean;
-  calculationRule?: string;
-  children?: Field[];
-}
-
-interface Section {
-  id: string;
-  title: string;
-  fields: Field[];
-  columns?: any[];
-}
-
-interface ReportData {
-  sections: Section[];
-}
+import { API_BASE_URL } from "@/app/api/page";
+import { 
+  reportStructure, 
+  parseInputValue,
+  formatAsMoney,
+  type Field,
+  type Section
+} from "@/app/maygt/page";
 
 interface Teacher {
   id: number;
@@ -64,212 +51,13 @@ interface FormData {
   report_name?: string;
 }
 
-const reportStructure: ReportData = {
-  sections: [
-    {
-      id: "A",
-      title: "А. Нийтлэг хувь хэмжээгээр ногдуулах татварын тооцоолол",
-      fields: [
-        {
-          id: "1",
-          type: "number",
-          label: "1. Нийт орлогын дүн (мөр 2+3+4+5)",
-          order: 1,
-          result: "0.00",
-          isCalculated: true,
-          calculationRule: "2+3+4+5",
-          children: [
-            {
-              id: "2",
-              type: "number",
-              label: "1.1. Татвараас чөлөөлөгдөх орлогын дүн",
-              order: 2,
-              result: "0.00",
-              isCalculated: false,
-            },
-            {
-              id: "3",
-              type: "number",
-              label: "1.2. Тусгай хувь хэмжээгээр татвар ногдох орлого (32)",
-              order: 3,
-              result: "0.00",
-              isCalculated: false,
-            },
-            {
-              id: "4",
-              type: "number",
-              label: "1.3. Бусад орлогын дүн",
-              order: 4,
-              result: "0.00",
-              isCalculated: false,
-            },
-            {
-              id: "5",
-              type: "number",
-              label: "1.4. Нийтлэг хувь хэмжээгээр татвар ногдох орлого",
-              order: 5,
-              result: "0.00",
-              isCalculated: true,
-              calculationRule: "6+7+8+9+10+11+12+13+14+15+16",
-              children: [
-                { id: "6", type: "number", label: "Бараа, ажил, үйлчилгээний борлуулалтын орлого", order: 6, result: "0.00", isCalculated: false },
-                { id: "7", type: "number", label: "Техникийн, удирдлагын, зөвлөхийн болон бусад үйлчилгээний орлого", order: 7, result: "0.00", isCalculated: false },
-                { id: "8", type: "number", label: "Үл хөдлөх эд хөрөнгө ашиглуулсан болон түрээслүүлсний орлого", order: 8, result: "0.00", isCalculated: false },
-                { id: "9", type: "number", label: "Хөдлөх эд хөрөнгө ашиглуулсан болон түрээслүүлсний орлого", order: 9, result: "0.00", isCalculated: false },
-                { id: "10", type: "number", label: "Үнэ төлбөргүйгээр бусдаас авсан бараа, ажил, үйлчилгээний орлого", order: 10, result: "0.00", isCalculated: false },
-                { id: "11", type: "number", label: "Гэрээгээр хүлээсэн үүргээ биелүүлээгүй этгээдээс авсан хүү, анз", order: 11, result: "0.00", isCalculated: false },
-                { id: "12", type: "number", label: "Төлбөрт таавар, бооцоот тоглоом, эд мөнгөний хонжворт сугалааны орлого", order: 12, result: "0.00", isCalculated: false },
-                { id: "13", type: "number", label: "Хувьцаа, үнэт цаас, санхүүгийн бусад хэрэгсэл борлуулсны орлого", order: 13, result: "0.00", isCalculated: false },
-                { id: "14", type: "number", label: "Бусад биет бус хөрөнгө болон хөдлөх эд хөрөнгө борлуулсан, шилжүүлсний орлого", order: 14, result: "0.00", isCalculated: false },
-                { id: "15", type: "number", label: "Гадаад валютын ханшийн зөрүүгийн бодит орлого", order: 15, result: "0.00", isCalculated: false },
-                { id: "16", type: "number", label: "Албан татвар ногдох бусад орлого", order: 16, result: "0.00", isCalculated: false },
-              ],
-            },
-          ],
-        },
-        {
-          id: "17",
-          type: "number",
-          label: "2. Нийт зардлын дүн (18+19+20)",
-          order: 17,
-          result: "0.00",
-          isCalculated: true,
-          calculationRule: "18+19+20",
-          children: [
-            { id: "18", type: "number", label: "2.1. Борлуулсан бүтээгдэхүүний өртөг", order: 18, result: "0.00", isCalculated: false },
-            { id: "19", type: "number", label: "2.2. Удирдлагын болон борлуулалтын үйл ажиллагааны зардал", order: 19, result: "0.00", isCalculated: false },
-            { id: "20", type: "number", label: "2.3. Үндсэн бус үйл ажиллагааны зардал", order: 20, result: "0.00", isCalculated: false },
-          ],
-        },
-        { id: "21", type: "number", label: "3. Татвар төлөхийн өмнөх ашиг +, алдагдал - (1-17)", order: 21, result: "0.00", isCalculated: true, calculationRule: "1-17" },
-        { id: "22", type: "number", label: "4. Татвар төлөхийн өмнөх ашиг, алдагдлыг нэмэгдүүлэх дүн", order: 22, result: "0.00", isCalculated: false },
-        { id: "23", type: "number", label: "5. Татвар төлөхийн өмнөх ашиг, алдагдлыг бууруулах дүн", order: 23, result: "0.00", isCalculated: false },
-        { id: "24", type: "number", label: "6. Татвар ногдуулах орлого (21+22-23)", order: 24, result: "0.00", isCalculated: true, calculationRule: "21+22-23" },
-        { id: "25", type: "number", label: "7. Сайн дурын даатгалын хураамжийн хэтрэлт", order: 25, result: "0.00", isCalculated: false },
-        { id: "26", type: "number", label: "8. Зохицуулагдсан татвар ногдуулах орлогын дүн (24+25)", order: 26, result: "0.00", isCalculated: true, calculationRule: "24+25" },
-        { id: "27", type: "number", label: "9. Өмнөх жилүүдийн татварын тайлангаар гарсан татварын албаар баталгаажуулсан алдагдлаас тайлант хугацаанд шилжүүлсэн дүн", order: 27, result: "0.00", isCalculated: false },
-        { id: "28", type: "number", label: "10. Нийтлэг хувь хэмжээгээр татвар ногдуулах орлого (26-27)", order: 28, result: "0.00", isCalculated: true, calculationRule: "26-27" },
-        { id: "29", type: "number", label: "11. Ногдуулсан төлбөл зохих албан татвар (28 * 25%)", order: 29, result: "0.00", isCalculated: false },
-        { id: "30", type: "number", label: "12. Хуулийн 22.5, 22.9-д заасны дагуу хөнгөлөгдөх татвар", order: 30, result: "0.00", isCalculated: false },
-        { id: "31", type: "number", label: "13. НИЙТЛЭГ ХУВЬ ХЭМЖЭЭГЭЭР НОГДУУЛСАН ТӨЛБӨЛ ЗОХИХ АЛБАН ТАТВАР (29-30)", order: 31, result: "0.00", isCalculated: true, calculationRule: "29-30" },
-      ],
-    },
-    {
-      id: "Б",
-      title: "Б. Тусгай хувь хэмжээгээр ногдуулах татварын тооцоолол:",
-      fields: [
-        { id: "32", type: "number", label: "14.Тусгай хувь хэмжээгээр татвар ногдох орлого (33+38+39+40+41+42+44+45+47+49)", order: 32, result: "0.00", isCalculated: true, calculationRule: "33+38+39+40+41+42+44+45+47+49" },
-        {
-          id: "33",
-          type: "number",
-          label: "15. Төрийн байгууллагаас олгосон эрх борлуулсан, шилжүүлсний орлого",
-          order: 33,
-          result: "0.00",
-          isCalculated: false,
-          children: [
-            { id: "34", type: "number", label: "Төрийн байгууллагад төлсөн төлбөр", order: 34, result: "0.00", isCalculated: false },
-            { id: "35", type: "number", label: "Бусдаас худалдаж авахад төлсөн төлбөр", order: 35, result: "0.00", isCalculated: false },
-            { id: "36", type: "number", label: "Татвар ногдуулах орлого (33-34-35)", order: 36, result: "0.00", isCalculated: true, calculationRule: "33-34-35" },
-            { id: "37", type: "number", label: "Ногдуулсан татвар (36 * 10%)", order: 37, result: "0.00", isCalculated: true, calculationRule: "36 * 10%" },
-          ],
-        },
-        { id: "38", type: "number", label: "16. Эрхийн шимтгэлийн орлого", order: 38, result: "0.00", isCalculated: false },
-        { id: "39", type: "number", label: "17. Ногдол ашгийн орлого", order: 39, result: "0.00", isCalculated: false },
-        { id: "40", type: "number", label: "18. Буцаан олгосон мөнгөн хөрөнгө", order: 40, result: "0.00", isCalculated: false },
-        { id: "41", type: "number", label: "19. Даатгалын нөхөн төлбөрийн орлого", order: 41, result: "0.00", isCalculated: false },
-        {
-          id: "42",
-          type: "number",
-          label: "20. Хүүгийн орлого",
-          order: 42,
-          result: "0.00",
-          isCalculated: false,
-          children: [
-            { id: "43", type: "number", label: "Ногдуулсан татвар ((38+39+40+41+42) * 10%)", order: 43, result: "0.00", isCalculated: true, calculationRule: "(38+39+40+41+42) * 0.10" },
-          ],
-        },
-        { id: "44", type: "number", label: "21. Зээл, өрийн хэрэгслийн хүүгийн орлого", order: 44, result: "0.00", isCalculated: false },
-        {
-          id: "45",
-          type: "number",
-          label: "22. Үнэт цаасны хүүгийн орлого",
-          order: 45,
-          result: "0.00",
-          isCalculated: false,
-          children: [
-            { id: "46", type: "number", label: "Ногдуулсан татвар ((44+45) * 5%)", order: 46, result: "0.00", isCalculated: true, calculationRule: "(44+45) * 0.05" },
-          ],
-        },
-        {
-          id: "47",
-          type: "number",
-          label: "23. Үл хөдлөх эд хөрөнгө борлуулсан, шилжүүлсний орлого",
-          order: 47,
-          result: "0.00",
-          isCalculated: false,
-          children: [
-            { id: "48", type: "number", label: "Ногдуулсан татвар (47 * 2%)", order: 48, result: "0.00", isCalculated: true, calculationRule: "47 * 0.02" },
-          ],
-        },
-        {
-          id: "49",
-          type: "number",
-          label: "24. Төлбөрт таавар, бооцоот тоглоом, сугалаанаас хожсон орлого",
-          order: 49,
-          result: "0.00",
-          isCalculated: false,
-          children: [
-            { id: "50", type: "number", label: "Ногдуулсан татвар (49 * 40%)", order: 50, result: "0.00", isCalculated: true, calculationRule: "49 * 0.40" },
-          ],
-        },
-        { id: "51", type: "number", label: "25. ТУСГАЙ ХУВЬ ХЭМЖЭЭГЭЭР НОГДУУЛСАН АЛБАН ТАТВАР (37+43+46+48+50)", order: 51, result: "0.00", isCalculated: true, calculationRule: "37+43+46+48+50" },
-      ],
-    },
-    {
-      id: "В",
-      title: "В. Албан татвар ногдуулах тооцоолол",
-      fields: [
-        { id: "52", type: "number", label: "26. Хуулийн дагуу бусдад суутгуулсан албан татвар", order: 52, result: "0.00", isCalculated: false },
-        { id: "53", type: "number", label: "27. Гадаад улсад ногдуулан төлсөн албан татвар", order: 53, result: "0.00", isCalculated: false },
-        { id: "54", type: "number", label: "28. ТӨЛБӨЛ ЗОХИХ ТАТВАРЫН ДҮН (31+51-52-53)", order: 54, result: "0.00", isCalculated: true, calculationRule: "31+51-52-53" },
-        { id: "55", type: "number", label: "29. Хөнгөлөн буцаан авахаар тооцсон дүн", order: 55, result: "0.00", isCalculated: false },
-      ],
-    },
-    {
-      id: "Г",
-      title: "Г. Аж ахуйн нэгжийн орлогын албан татвараас хөнгөлөх, чөлөөлөх тухай хуулийн дагуу албан татвараас хөнгөлөх, чөлөөлөх татварын тооцоолол",
-      fields: [
-        { id: "56", type: "number", label: "30. Түрээсийн төлбөрийг бууруулсан аж ахуйн нэгжийг орлогын албан татвараас хөнгөлөх", order: 56, result: "0.00", isCalculated: false },
-        { id: "57", type: "number", label: "31. Аж ахуйн нэгжийн орлогын албан татвараас чөлөөлөх мэдээ", order: 57, result: "0.00", isCalculated: false },
-        { id: "58", type: "number", label: "32. Нийт төлбөл зохих татварын дүн (31+51-52-53-56-57)", order: 58, result: "0.00", isCalculated: true, calculationRule: "31+51-52-53-56-57" },
-      ],
-    },
-  ],
-};
-
-const formatAsMoney = (value: string | number): string => {
-  if (value === "" || value === undefined || value === null) return "0.00 ₮";
-  const num = typeof value === "string" ? parseFloat(value) : value;
-  if (isNaN(num)) return "0.00 ₮";
-  const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${formatted} ₮`;
-};
-
-const parseInputValue = (value: string): string => {
-  if (!value) return "";
-  let cleanValue = value.replace(/,/g, "");
-  cleanValue = cleanValue.replace(/[^0-9.-]/g, "");
-  const dotCount = (cleanValue.match(/\./g) || []).length;
-  if (dotCount > 1) {
-    const firstDotIndex = cleanValue.indexOf(".");
-    cleanValue =
-      cleanValue.substring(0, firstDotIndex + 1) +
-      cleanValue.substring(firstDotIndex + 1).replace(/\./g, "");
-  }
-  const num = parseFloat(cleanValue);
-  if (isNaN(num)) return "";
-  return num.toString();
-};
+interface ReportStatus {
+  is_submitted: boolean;
+  status: string;
+  submitted_at?: string;
+  teacher_name?: string;
+  feedback?: string;
+}
 
 export default function TaxReportPage() {
   const router = useRouter();
@@ -280,6 +68,7 @@ export default function TaxReportPage() {
   const [showTeacherList, setShowTeacherList] = useState(false);
   const [isLoadingTeachers, setIsLoadingTeachers] = useState(true);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [reportStatus, setReportStatus] = useState<ReportStatus | null>(null);
 
   const recalculateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputFocusRef = useRef<{ [key: string]: boolean }>({});
@@ -307,6 +96,39 @@ export default function TaxReportPage() {
     report_name: "",
   });
 
+  // Тайлан илгээгдсэн эсэхийг шалгах
+  const isReportLocked = reportStatus?.is_submitted === true || 
+    reportStatus?.status === "Хүлээгдэж байна" || 
+    reportStatus?.status === "Баталгаажсан" ||
+    reportStatus?.status === "Буцаагдсан";
+
+  const getStatusMessage = () => {
+    if (!reportStatus) return null;
+    
+    switch (reportStatus.status) {
+      case "Хүлээгдэж байна":
+        return {
+          message: "Энэ тайлан аль хэдийн илгээгдсэн байна. Дахин илгээх боломжгүй.",
+          color: "bg-blue-50 border-blue-200 text-blue-700",
+          icon: <FiCheckCircle className="text-blue-600" />
+        };
+      case "Баталгаажсан":
+        return {
+          message: "Энэ тайлан баталгаажсан байна. Өөрчлөлт оруулах боломжгүй.",
+          color: "bg-green-50 border-green-200 text-green-700",
+          icon: <FiCheckCircle className="text-green-600" />
+        };
+      case "Буцаагдсан":
+        return {
+          message: "Энэ тайлан татгалзсан байна. Багшийн санал шүүмжийг харна уу.",
+          color: "bg-red-50 border-red-200 text-red-700",
+          icon: <FiAlertCircle className="text-red-600" />
+        };
+      default:
+        return null;
+    }
+  };
+
   useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
@@ -329,17 +151,47 @@ export default function TaxReportPage() {
         reportIdRef.current = parsedId;
         setFormData((prev) => ({ ...prev, report_id: parsedId }));
         fetchReportData(parsedId);
+        fetchReportStatus(parsedId);
       }
     } else {
       initializeValues();
     }
   }, [reportIdFromUrl]);
 
+  // Тайлангийн статусыг шалгах
+  const fetchReportStatus = async (reportId: number) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/report/${reportId}/status/`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      const data = await response.json();
+      console.log("Тайлангийн статус:", data);
+
+      if (data.resultCode === 7520 && data.data) {
+        setReportStatus({
+          is_submitted: data.data.is_submitted || false,
+          status: data.data.status || "draft",
+          submitted_at: data.data.submitted_at,
+          teacher_name: data.data.teacher_name,
+          feedback: data.data.feedback,
+        });
+      }
+    } catch (error) {
+      console.error("Тайлангийн статус татахад алдаа:", error);
+    }
+  };
+
   const fetchReportData = async (reportId: number) => {
     setIsLoadingReport(true);
     try {
       const response = await fetch(
-        `http://localhost:8000/api/report/${reportId}/`,
+        `${API_BASE_URL}/api/report/${reportId}/`,
         {
           method: "GET",
           credentials: "include",
@@ -365,6 +217,11 @@ export default function TaxReportPage() {
             }
           }
         }
+
+        // Хэрэв тайлан илгээгдсэн бол input-уудыг readOnly болгох
+        const isSubmitted = report.status === "Хүлээгдэж буй" || 
+                           report.status === "Баталгаажсан" || 
+                           report.status === "Буцаагдсан";
 
         setFormData((prev) => ({
           ...prev,
@@ -400,7 +257,7 @@ export default function TaxReportPage() {
   const fetchTeachers = async () => {
     setIsLoadingTeachers(true);
     try {
-      const response = await fetch("http://localhost:8000/api/user/teacher/", {
+      const response = await fetch(`${API_BASE_URL}/api/user/teacher/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -499,13 +356,15 @@ export default function TaxReportPage() {
   }, [evaluateRule]);
 
   const handleFocus = useCallback((fieldId: string) => {
+    if (isReportLocked) return; // Түгжигдсэн бол фокус авахгүй
     inputFocusRef.current[fieldId] = true;
     tempInputValueRef.current[fieldId] = "";
     setFormData((prev) => ({ ...prev }));
-  }, []);
+  }, [isReportLocked]);
 
   const handleBlur = useCallback(
     (fieldId: string) => {
+      if (isReportLocked) return;
       inputFocusRef.current[fieldId] = false;
       delete tempInputValueRef.current[fieldId];
       const currentValue = formData.values[fieldId];
@@ -520,11 +379,12 @@ export default function TaxReportPage() {
       }
       setFormData((prev) => ({ ...prev }));
     },
-    [formData.values]
+    [formData.values, isReportLocked]
   );
 
   const handleInputChange = useCallback(
     (fieldId: string, displayValue: string) => {
+      if (isReportLocked) return; // Түгжигдсэн бол өөрчлөх боломжгүй
       tempInputValueRef.current[fieldId] = displayValue;
       const cleanValue = parseInputValue(displayValue);
       setFormData((prev) => ({
@@ -535,10 +395,14 @@ export default function TaxReportPage() {
         clearTimeout(recalculateTimeoutRef.current);
       recalculateTimeoutRef.current = setTimeout(() => recalculateAll(), 100);
     },
-    [recalculateAll]
+    [recalculateAll, isReportLocked]
   );
 
   const resetAllValues = () => {
+    if (isReportLocked) {
+      setSubmitError("Тайлан илгээгдсэн тул утгуудыг өөрчлөх боломжгүй.");
+      return;
+    }
     const newValues: Record<string, string> = {};
     const resetFields = (fields: Field[]) => {
       for (const field of fields) {
@@ -607,6 +471,12 @@ export default function TaxReportPage() {
   };
 
   const saveReport = async (isDraft: boolean = false) => {
+    // Тайлан түгжигдсэн эсэхийг шалгах
+    if (isReportLocked) {
+      setSubmitError("Энэ тайлан аль хэдийн илгээгдсэн эсвэл баталгаажсан тул өөрчлөлт оруулах боломжгүй.");
+      return;
+    }
+
     if (!isDraft && !selectedTeacher) {
       setSubmitError("Тайлан илгээх багшаа сонгоно уу");
       return;
@@ -648,7 +518,7 @@ export default function TaxReportPage() {
       });
 
       const saveResponse = await fetch(
-        `http://localhost:8000/api/report/savereportfields/${currentReportId}/`,
+        `${API_BASE_URL}/api/report/savereportfields/${currentReportId}/`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -686,7 +556,7 @@ export default function TaxReportPage() {
       console.log("2. addsubmission хүсэлт:", submissionPayload);
 
       const submissionResponse = await fetch(
-        "http://localhost:8000/api/report/addsubmission/",
+        `${API_BASE_URL}/api/report/addsubmission/`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -701,7 +571,14 @@ export default function TaxReportPage() {
       if (submissionData.resultCode === 6120) {
         showNotification("Тайлан амжилттай илгээгдлээ.", "success");
         setSubmitSuccess(true);
+        setReportStatus({
+          is_submitted: true,
+          status: "Хүлээгдэж буй",
+          submitted_at: new Date().toISOString(),
+          teacher_name: selectedTeacher?.first_name + " " + selectedTeacher?.last_name,
+        });
         setTimeout(() => setSubmitSuccess(false), 5000);
+        // 2 секундын дараа тайлангийн жагсаалт руу буцах
         setTimeout(() => router.push("/student/reports"), 2000);
       } else if (submissionData.resultCode === 6121) {
         setSubmitError("Шаардлагатай талбарууд дутуу байна.");
@@ -713,6 +590,8 @@ export default function TaxReportPage() {
         setSubmitError("Method буруу. Зөвхөн POST хүсэлт илгээнэ үү.");
       } else if (submissionData.resultCode === 6125) {
         setSubmitError("Хүсэлтийн бие (body) JSON форматтай биш байна.");
+      } else if (submissionData.resultCode === 6126) {
+        setSubmitError("Энэ тайлан аль хэдийн илгээгдсэн байна. Дахин илгээх боломжгүй.");
       } else {
         setSubmitError(
           submissionData.resultMessage || `Алдаа гарлаа (Код: ${submissionData.resultCode})`
@@ -735,7 +614,9 @@ export default function TaxReportPage() {
           <div
             className={`grid grid-cols-12 gap-4 p-3 ${
               field.isCalculated ? "bg-blue-50" : ""
-            } border-b border-gray-200 hover:bg-gray-50/50 transition`}
+            } border-b border-gray-200 hover:bg-gray-50/50 transition ${
+              isReportLocked && !field.isCalculated ? "bg-gray-50" : ""
+            }`}
           >
             <div className="col-span-1 font-medium text-gray-700 text-center">
               {field.id}
@@ -761,16 +642,18 @@ export default function TaxReportPage() {
                 onChange={(e) => handleInputChange(field.id, e.target.value)}
                 onFocus={() => handleFocus(field.id)}
                 onBlur={() => handleBlur(field.id)}
-                readOnly={field.isCalculated}
+                readOnly={field.isCalculated || isReportLocked}
                 placeholder="0.00 ₮"
                 className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-right text-gray-900 font-normal ${
                   field.isCalculated
                     ? "bg-blue-100/50 font-medium cursor-not-allowed"
+                    : isReportLocked
+                    ? "bg-gray-100 cursor-not-allowed text-gray-500"
                     : "bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 } ${
                   (!formData.values[field.id] ||
                     formData.values[field.id] === "") &&
-                  !field.isCalculated
+                  !field.isCalculated && !isReportLocked
                     ? "border-yellow-300 bg-yellow-50/30"
                     : ""
                 }`}
@@ -800,6 +683,8 @@ export default function TaxReportPage() {
     );
   }
 
+  const statusInfo = getStatusMessage();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
       <Header />
@@ -819,6 +704,27 @@ export default function TaxReportPage() {
           </span>
         </div>
 
+        {/* Тайлан түгжигдсэн үзүүлэх мэдэгдэл */}
+        {statusInfo && (
+          <div className={`mb-6 p-4 ${statusInfo.color} rounded-xl border flex items-center gap-3`}>
+            {statusInfo.icon}
+            <span>{statusInfo.message}</span>
+            {reportStatus?.status === "rejected" && reportStatus?.feedback && (
+              <div className="ml-4 p-3 bg-white rounded-lg">
+                <p className="text-sm font-medium">Багшийн санал:</p>
+                <p className="text-sm text-gray-600">{reportStatus.feedback}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isReportLocked && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-700">
+            <FiLock className="text-xl flex-shrink-0" />
+            <span>Энэ тайлан түгжигдсэн байна. Зөвхөн харах боломжтой.</span>
+          </div>
+        )}
+
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
@@ -827,9 +733,26 @@ export default function TaxReportPage() {
             <p className="text-gray-600 mt-1 flex items-center gap-2">
               <FaGraduationCap className="text-blue-600" />
               {studentInfo.name} - {studentInfo.id}
-              <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-                Ноорог
-              </span>
+              {!isReportLocked && (
+                <span className="ml-2 px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded-full">
+                  Ноорог
+                </span>
+              )}
+              {reportStatus?.status === "Хүлээгдэж буй" && (
+                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                  Хүлээгдэж буй
+                </span>
+              )}
+              {reportStatus?.status === "Баталгаажсан" && (
+                <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                  Баталгаажсан
+                </span>
+              )}
+              {reportStatus?.status === "Буцаагдсан" && (
+                <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full">
+                  Буцаагдсан
+                </span>
+              )}
             </p>
           </div>
 
@@ -839,9 +762,10 @@ export default function TaxReportPage() {
               <select
                 value={formData.tax_period_year}
                 onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, tax_period_year: parseInt(e.target.value) }))
+                  !isReportLocked && setFormData((prev) => ({ ...prev, tax_period_year: parseInt(e.target.value) }))
                 }
-                className="border-none focus:ring-0 text-sm bg-transparent text-gray-900"
+                disabled={isReportLocked}
+                className="border-none focus:ring-0 text-sm bg-transparent text-gray-900 disabled:text-gray-400"
               >
                 {[2023, 2024, 2025, 2026].map((year) => (
                   <option key={year} value={year}>{year} он</option>
@@ -851,9 +775,10 @@ export default function TaxReportPage() {
               <select
                 value={formData.tax_period_month}
                 onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, tax_period_month: parseInt(e.target.value) }))
+                  !isReportLocked && setFormData((prev) => ({ ...prev, tax_period_month: parseInt(e.target.value) }))
                 }
-                className="border-none focus:ring-0 text-sm bg-transparent text-gray-900"
+                disabled={isReportLocked}
+                className="border-none focus:ring-0 text-sm bg-transparent text-gray-900 disabled:text-gray-400"
               >
                 {[1,2,3,4,5,6,7,8,9,10,11,12].map((month) => (
                   <option key={month} value={month}>{month} сар</option>
@@ -872,124 +797,153 @@ export default function TaxReportPage() {
           </div>
         )}
 
-        <div className="mb-6">
-          {!showTeacherList ? (
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-5">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <FaChalkboardTeacher className="text-white text-xl" />
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Тайлан илгээх багш <span className="text-red-500">*</span>
-                  </label>
-                  {selectedTeacher ? (
-                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center font-bold text-lg">
-                          {selectedTeacher.first_name?.charAt(0) || selectedTeacher.email?.charAt(0).toUpperCase() || "Б"}
+        {/* Багш сонгох хэсэг - Зөвхөн түгжигдээгүй үед л харагдана */}
+        {!isReportLocked && (
+          <div className="mb-6">
+            {!showTeacherList ? (
+              <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <FaChalkboardTeacher className="text-white text-xl" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Тайлан илгээх багш <span className="text-red-500">*</span>
+                    </label>
+                    {selectedTeacher ? (
+                      <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 text-white flex items-center justify-center font-bold text-lg">
+                            {selectedTeacher.first_name?.charAt(0) || selectedTeacher.email?.charAt(0).toUpperCase() || "Б"}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">
+                              {selectedTeacher.last_name} {selectedTeacher.first_name}
+                            </p>
+                            <p className="text-sm text-gray-500 flex items-center gap-1">
+                              <FiUser className="text-xs" />
+                              {selectedTeacher.email}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-gray-900">
-                            {selectedTeacher.last_name} {selectedTeacher.first_name}
-                          </p>
-                          <p className="text-sm text-gray-500 flex items-center gap-1">
-                            <FiUser className="text-xs" />
-                            {selectedTeacher.email}
-                          </p>
-                        </div>
+                        <button
+                          onClick={() => setShowTeacherList(true)}
+                          className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-100 rounded-lg transition font-medium"
+                        >
+                          Өөрчлөх
+                        </button>
                       </div>
+                    ) : (
                       <button
                         onClick={() => setShowTeacherList(true)}
-                        className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-100 rounded-lg transition font-medium"
+                        className="w-full md:w-96 px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl text-left text-gray-500 hover:border-blue-400 hover:bg-blue-50 transition flex items-center gap-3 group"
                       >
-                        Өөрчлөх
+                        <FiUser className="text-gray-400 group-hover:text-blue-500" />
+                        <span className="group-hover:text-blue-600">Багш сонгоно уу...</span>
                       </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <FaChalkboardTeacher className="text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-900">Багш сонгох</h3>
+                        <p className="text-sm text-gray-500">Нийт {teachers.length} багш бүртгэлтэй</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowTeacherList(false)}
+                      className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 transition flex items-center gap-1"
+                    >
+                      <FiArrowLeft /> Буцах
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5">
+                  {isLoadingTeachers ? (
+                    <div className="flex justify-center items-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                  ) : teachers.length === 0 ? (
+                    <div className="text-center py-12">
+                      <FaChalkboardTeacher className="text-gray-300 text-5xl mx-auto mb-3" />
+                      <p className="text-gray-500">Багш олдсонгүй</p>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => setShowTeacherList(true)}
-                      className="w-full md:w-96 px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl text-left text-gray-500 hover:border-blue-400 hover:bg-blue-50 transition flex items-center gap-3 group"
-                    >
-                      <FiUser className="text-gray-400 group-hover:text-blue-500" />
-                      <span className="group-hover:text-blue-600">Багш сонгоно уу...</span>
-                    </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {teachers.map((teacher) => (
+                        <motion.div
+                          key={teacher.id}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          whileHover={{ scale: 1.02 }}
+                          onClick={() => {
+                            setSelectedTeacher(teacher);
+                            setFormData((prev) => ({ ...prev, teacher_id: teacher.id }));
+                            setShowTeacherList(false);
+                          }}
+                          className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                            selectedTeacher?.id === teacher.id
+                              ? "border-blue-500 bg-blue-50 shadow-md"
+                              : "border-gray-200 hover:border-blue-300 hover:shadow-md"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
+                              {teacher.first_name?.charAt(0) || teacher.email?.charAt(0).toUpperCase() || "Б"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-gray-900 truncate">
+                                {teacher.last_name} {teacher.first_name}
+                              </h4>
+                              <p className="text-sm text-gray-500 truncate">{teacher.email}</p>
+                            </div>
+                            {selectedTeacher?.id === teacher.id && (
+                              <FiCheckCircle className="text-green-500 flex-shrink-0" />
+                            )}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-              <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <FaChalkboardTeacher className="text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-900">Багш сонгох</h3>
-                      <p className="text-sm text-gray-500">Нийт {teachers.length} багш бүртгэлтэй</p>
-                    </div>
+            )}
+          </div>
+        )}
+
+        {/* Илгээгдсэн үед багшийн мэдээллийг харуулах */}
+        {isReportLocked && reportStatus?.teacher_name && (
+          <div className="mb-6 bg-white rounded-xl shadow-lg border border-gray-200 p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                <FaChalkboardTeacher className="text-white text-xl" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Илгээсэн багш
+                </label>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{reportStatus.teacher_name}</p>
+                    {reportStatus.submitted_at && (
+                      <p className="text-sm text-gray-500">
+                        Илгээсэн огноо: {new Date(reportStatus.submitted_at).toLocaleString()}
+                      </p>
+                    )}
                   </div>
-                  <button
-                    onClick={() => setShowTeacherList(false)}
-                    className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 transition flex items-center gap-1"
-                  >
-                    <FiArrowLeft /> Буцах
-                  </button>
                 </div>
               </div>
-              <div className="p-5">
-                {isLoadingTeachers ? (
-                  <div className="flex justify-center items-center py-12">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  </div>
-                ) : teachers.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FaChalkboardTeacher className="text-gray-300 text-5xl mx-auto mb-3" />
-                    <p className="text-gray-500">Багш олдсонгүй</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {teachers.map((teacher) => (
-                      <motion.div
-                        key={teacher.id}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        whileHover={{ scale: 1.02 }}
-                        onClick={() => {
-                          setSelectedTeacher(teacher);
-                          setFormData((prev) => ({ ...prev, teacher_id: teacher.id }));
-                          setShowTeacherList(false);
-                        }}
-                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                          selectedTeacher?.id === teacher.id
-                            ? "border-blue-500 bg-blue-50 shadow-md"
-                            : "border-gray-200 hover:border-blue-300 hover:shadow-md"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
-                            {teacher.first_name?.charAt(0) || teacher.email?.charAt(0).toUpperCase() || "Б"}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-gray-900 truncate">
-                              {teacher.last_name} {teacher.first_name}
-                            </h4>
-                            <p className="text-sm text-gray-500 truncate">{teacher.email}</p>
-                          </div>
-                          {selectedTeacher?.id === teacher.id && (
-                            <FiCheckCircle className="text-green-500 flex-shrink-0" />
-                          )}
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <AnimatePresence>
           {submitSuccess && (
@@ -1034,18 +988,28 @@ export default function TaxReportPage() {
           ))}
         </div>
 
+        {/* Үйлдлийн товчнууд - Түгжигдсэн үед нуугдах эсвэл идэвхгүй болох */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <button
             onClick={resetAllValues}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
+            disabled={isReportLocked}
+            className={`px-4 py-2 rounded-xl transition flex items-center gap-2 ${
+              isReportLocked
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
           >
             <FiRefreshCw /> Бүгдийг 0 болгох
           </button>
 
           <button
             onClick={() => saveReport(true)}
-            disabled={isSavingDraft || !reportIdRef.current}
-            className="px-5 py-2 bg-white border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSavingDraft || !reportIdRef.current || isReportLocked}
+            className={`px-5 py-2 rounded-xl transition flex items-center gap-2 ${
+              isSavingDraft || !reportIdRef.current || isReportLocked
+                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
           >
             {isSavingDraft ? (
               <>
@@ -1061,8 +1025,12 @@ export default function TaxReportPage() {
 
           <button
             onClick={() => saveReport(false)}
-            disabled={isSubmitting || !selectedTeacher || !reportIdRef.current}
-            className="px-6 py-2 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
+            disabled={isSubmitting || !selectedTeacher || !reportIdRef.current || isReportLocked}
+            className={`px-6 py-2 rounded-xl font-medium shadow-lg transition flex items-center gap-2 ${
+              isSubmitting || !selectedTeacher || !reportIdRef.current || isReportLocked
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white hover:opacity-90"
+            } ml-auto`}
           >
             {isSubmitting ? (
               <>

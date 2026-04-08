@@ -14,7 +14,7 @@ import {
 } from "react-icons/fi";
 import Header from "../component/Header";
 import { useRouter } from "next/navigation";
-
+import { API_BASE_URL } from "@/app/api/page";
 interface Organization {
   org_id: number;
   org_name: string;
@@ -42,7 +42,7 @@ export default function SelectOrganizationPage() {
   // Гарах функц
   const handleLogout = async () => {
     try {
-      await fetch("https://bmtax.mandakh.org/api/auth/logout/", {
+      await fetch(`${API_BASE_URL}/api/auth/logout/`, {
         method: "POST",
         credentials: "include",
       });
@@ -71,7 +71,7 @@ export default function SelectOrganizationPage() {
     setError("");
     
     try {
-      const response = await fetch("https://bmtax.mandakh.org/api/organization/organizationlist/", {
+      const response = await fetch(`${API_BASE_URL}/api/organization/organizationlist/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -116,7 +116,7 @@ export default function SelectOrganizationPage() {
     setError("");
     
     try {
-      const response = await fetch("https://bmtax.mandakh.org/api/organization/addorganization/", {
+      const response = await fetch(`${API_BASE_URL}/api/organization/addorganization/`, {
         method: "POST",
         credentials: "include",
         headers: {

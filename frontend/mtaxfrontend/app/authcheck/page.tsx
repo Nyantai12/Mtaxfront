@@ -1,6 +1,7 @@
+import { API_BASE_URL } from "@/app/api/page";
 export async function checkAuth() {
   try {
-    const res = await fetch("http://localhost:8000/api/auth/check/", {
+    const res = await fetch(`${API_BASE_URL}/api/auth/check/`, {
       method: "GET",
       credentials: "include"
     });

@@ -25,6 +25,7 @@ import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/app/component/Header";
+import { API_BASE_URL } from "@/app/api/page";
 
 // Интерфейсүүд
 interface Report {
@@ -33,7 +34,7 @@ interface Report {
   type_name: string;
   type_id: number;
   status: string;
-  current_status?: string; // API-аас ирэх статус
+  current_status?: string;
   created_at: string;
   submitted_at: string;
   reviewed_at?: string;
@@ -108,8 +109,9 @@ export default function StudentMyReportsPage() {
 
   const fetchMyReports = async () => {
     setLoading(true);
+    setError("");
     try {
-      const response = await fetch("http://localhost:8000/api/report/submissionlist/", {
+      const response = await fetch(`${API_BASE_URL}/api/report/submissionlist/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -118,7 +120,7 @@ export default function StudentMyReportsPage() {
       });
 
       const data = await response.json();
-      console.log("Миний тайлангууд:", data);
+      console.log("Миний тайлангууд (жагсаалт):", data);
 
       if (data.resultCode === 6130 && data.data) {
         const reportList = data.data;
@@ -129,12 +131,20 @@ export default function StudentMyReportsPage() {
           return;
         }
 
-        // Тайлан бүрийн дэлгэрэнгүй мэдээллийг татах
-        const detailedReports: Report[] = [];
-        
+        // report_id-ээр бүлэглэх Map объект
+        const reportsMap = new Map<number, Report>();
+
         for (const item of reportList) {
+          const reportId = item.report_id;
+          
+          // Хэрэв энэ ID-тай тайлан аль хэдийн нэмэгдсэн бол цааш үргэлжлүүлэхгүй
+          if (reportsMap.has(reportId)) {
+            console.log(`Тайлан ${reportId} аль хэдийн нэмэгдсэн байна. Давхардахгүй.`);
+            continue;
+          }
+
           try {
-            const detailResponse = await fetch(`http://localhost:8000/api/report/${item.report_id}/`, {
+            const detailResponse = await fetch(`${API_BASE_URL}/api/report/${reportId}/`, {
               method: "GET",
               credentials: "include",
               headers: {
@@ -143,37 +153,38 @@ export default function StudentMyReportsPage() {
             });
             
             const detailData = await detailResponse.json();
-            console.log(`Тайлан ${item.report_id} дэлгэрэнгүй:`, detailData);
+            console.log(`Тайлан ${reportId} дэлгэрэнгүй:`, detailData);
+            
+            let report: Report;
             
             if (detailData.resultCode === 7520 && detailData.data) {
-              const report = detailData.data;
-              // API-аас ирсэн статусыг маппинг хийх
-              const mappedStatus = mapStatus(item.current_status || report.status || "Хүлээгдэж буй");
+              const reportData = detailData.data;
+              const mappedStatus = mapStatus(item.current_status || reportData.status || "Хүлээгдэж буй");
 
-              detailedReports.push({
-                id: report.report_id || item.report_id,
-                title: report.type_name || item.type_name || `Тайлан ${item.report_id}`,
-                type_name: report.type_name || item.type_name || "Тайлан",
-                type_id: report.type_id || item.report_type_id,
+              report = {
+                id: reportData.report_id || reportId,
+                title: reportData.type_name || item.type_name || `Тайлан ${reportId}`,
+                type_name: reportData.type_name || item.type_name || "Тайлан",
+                type_id: reportData.type_id || item.report_type_id,
                 status: mappedStatus,
                 current_status: item.current_status,
-                created_at: report.created_at || item.submission_date || new Date().toISOString(),
-                submitted_at: report.submitted_at || item.submission_date || "",
-                reviewed_at: report.reviewed_at,
-                teacher_name: report.teacher_name,
-                teacher_email: report.teacher_email,
-                feedback: report.feedback,
-                report_data: report.report_data,
+                created_at: reportData.created_at || item.submission_date || new Date().toISOString(),
+                submitted_at: reportData.submitted_at || item.submission_date || "",
+                reviewed_at: reportData.reviewed_at,
+                teacher_name: reportData.teacher_name,
+                teacher_email: reportData.teacher_email,
+                feedback: reportData.feedback,
+                report_data: reportData.report_data,
                 org_name: item.org_name,
                 first_name: item.first_name,
                 last_name: item.last_name,
-              });
+              };
             } else {
               // Дэлгэрэнгүй мэдээлэл байхгүй бол жагсаалтын мэдээллээр үүсгэх
               const mappedStatus = mapStatus(item.current_status);
-              detailedReports.push({
-                id: item.report_id,
-                title: item.type_name || `Тайлан ${item.report_id}`,
+              report = {
+                id: reportId,
+                title: item.type_name || `Тайлан ${reportId}`,
                 type_name: item.type_name || "Тайлан",
                 type_id: item.report_type_id,
                 status: mappedStatus,
@@ -188,15 +199,19 @@ export default function StudentMyReportsPage() {
                 org_name: item.org_name,
                 first_name: item.first_name,
                 last_name: item.last_name,
-              });
+              };
             }
+            
+            // Map-д хадгалах (report_id-ээр)
+            reportsMap.set(reportId, report);
+            
           } catch (err) {
-            console.error(`Тайлан ${item.report_id} дэлгэрэнгүй татахад алдаа:`, err);
+            console.error(`Тайлан ${reportId} дэлгэрэнгүй татахад алдаа:`, err);
             // Алдаа гарсан ч жагсаалтын мэдээллээр нэмэх
             const mappedStatus = mapStatus(item.current_status);
-            detailedReports.push({
-              id: item.report_id,
-              title: item.type_name || `Тайлан ${item.report_id}`,
+            const report: Report = {
+              id: reportId,
+              title: item.type_name || `Тайлан ${reportId}`,
               type_name: item.type_name || "Тайлан",
               type_id: item.report_type_id,
               status: mappedStatus,
@@ -211,12 +226,22 @@ export default function StudentMyReportsPage() {
               org_name: item.org_name,
               first_name: item.first_name,
               last_name: item.last_name,
-            });
+            };
+            reportsMap.set(reportId, report);
           }
         }
         
-        console.log("Дэлгэрэнгүй тайлангууд:", detailedReports);
-        setReports(detailedReports);
+        // Map-аас массив болгон хөрвүүлэх
+        const uniqueReports = Array.from(reportsMap.values());
+        
+        // Хамгийн сүүлд илгээсэнээр эрэмбэлэх
+        uniqueReports.sort((a, b) => 
+          new Date(b.submitted_at || b.created_at).getTime() - 
+          new Date(a.submitted_at || a.created_at).getTime()
+        );
+        
+        console.log("Давхардал арилгасан тайлангууд:", uniqueReports);
+        setReports(uniqueReports);
       } else if (data.resultCode === 8213) {
         setError("Хэрэглэгчийн эрх баталгаажаагүй байна. Дахин нэвтэрнэ үү.");
         setTimeout(() => {
@@ -234,7 +259,6 @@ export default function StudentMyReportsPage() {
   };
 
   const getStatusBadge = (status: string, currentStatus?: string) => {
-    // Хэрэв currentStatus байвал түүнийг харуулах
     const displayStatus = currentStatus || 
       (status === "pending" ? "Хүлээгдэж буй" :
        status === "reviewed" ? "Хянаж буй" :
@@ -306,8 +330,23 @@ export default function StudentMyReportsPage() {
       <Header />
       
       <div className="max-w-7xl mx-auto px-6 py-8">
-      
-
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Миний тайлангууд</h1>
+            <p className="text-gray-600 mt-1 flex items-center gap-2">
+              <FaGraduationCap className="text-blue-600" />
+              {studentInfo?.name} - {studentInfo?.student_id}
+            </p>
+          </div>
+          <Link
+            href="/student/reports"
+            className="mt-4 md:mt-0 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium hover:opacity-90 transition"
+          >
+            <FiFileText />
+            Шинэ тайлан илгээх
+          </Link>
+        </div>
 
         {/* Error Message */}
         {error && (
@@ -641,22 +680,28 @@ export default function StudentMyReportsPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4 border-t border-gray-200">
+                  {selectedReport.status === "rejected" && (
+                    <Link
+                      href={`/student/tax-report/${selectedReport.id}`}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition text-center"
+                    >
+                      Засварлах
+                    </Link>
+                  )}
+                  <button
+                    onClick={() => setSelectedReport(null)}
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition"
+                  >
+                    Хаах
+                  </button>
+                </div>
               </div>
-              
-              
             </motion.div>
           </div>
         )}
-        
-        {/* Create New Report Button */}
-        <div className="fixed bottom-8 right-8">
-          <Link
-            href="/student/reports"
-            className="w-14 h-14 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-full shadow-lg hover:shadow-xl transition flex items-center justify-center group"
-          >
-            <FiFileText className="text-2xl group-hover:scale-110 transition" />
-          </Link>
-        </div>
       </div>
     </div>
   );

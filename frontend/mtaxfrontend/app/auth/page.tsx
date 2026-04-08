@@ -14,6 +14,7 @@ import { FaGraduationCap } from "react-icons/fa";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { API_BASE_URL } from "@/app/api/page";
 
 interface UserData {
   id: number;
@@ -35,7 +36,7 @@ interface LoginResponse {
   }>;
 }
 
-const API_BASE_URL = "http://localhost:8000";
+
 
 export default function AuthPage() {
   const searchParams = useSearchParams();

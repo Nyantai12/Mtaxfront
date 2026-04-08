@@ -21,6 +21,7 @@ import {
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher, FaUserShield } from "react-icons/fa";
 import Header from "@/app/component/Header";
+import { API_BASE_URL } from "@/app/api/page";
 
 interface User {
   id: number;
@@ -98,7 +99,7 @@ export default function AdminUsersPage() {
     setError(null);
     
     try {
-      const response = await fetch("http://localhost:8000/api/user/userlist/", {
+      const response = await fetch(`${API_BASE_URL}/api/user/userlist/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -244,10 +245,10 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
     
     // Шинэ эрхээс хамаарч endpoint сонгох
     if (newRole === "teacher") {
-      endpoint = "http://localhost:8000/api/user/setteacher/";
+      endpoint = `${API_BASE_URL}/api/user/setteacher/`;
       method = "POST";
     } else if (newRole === "student") {
-      endpoint = "http://localhost:8000/api/user/setstudent/"; // Энэ endpoint байх ёстой
+      endpoint = `${API_BASE_URL}/api/user/setstudent/`; // Энэ endpoint байх ёстой
       method = "POST";
     } else {
       throw new Error("Буруу эрх сонголт");
@@ -308,7 +309,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
     }
     
     try {
-      const response = await fetch(`http://localhost:8000/api/user/delete/${selectedUser.id}/`, {
+      const response = await fetch(`${API_BASE_URL}/api/user/delete/${selectedUser.id}/`, {
         method: "DELETE",
         credentials: "include",
         headers: {

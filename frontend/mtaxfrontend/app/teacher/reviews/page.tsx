@@ -18,6 +18,7 @@ import {
 } from "react-icons/fi";
 import Header from "@/app/component/Header";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/app/api/page";
 
 // Интерфейсүүд
 interface Report {
@@ -55,7 +56,7 @@ interface TeacherReportListItem {
   student_email: string;
   email?: string;
   submitted_at: string;
-  current_status: string;  // ★ Backend-ээс ирэх статус (монгол)
+  current_status: string;
   course_name?: string;
 }
 
@@ -68,12 +69,12 @@ interface TeacherInfo {
   department?: string;
 }
 
-// ★ Статусыг монголоос англи руу хөрвүүлэх
+// Статусыг монголоос англи руу хөрвүүлэх
 const mapMongolianStatusToEnglish = (mongolianStatus: string): string => {
   switch(mongolianStatus) {
     case "Баталгаажсан":
       return "approved";
-    case "Буцаасан":
+    case "Буцаагдсан":
       return "rejected";
     case "Хянаж буй":
       return "reviewed";
@@ -84,10 +85,10 @@ const mapMongolianStatusToEnglish = (mongolianStatus: string): string => {
   }
 };
 
-// ★ Англи статусыг монгол руу хөрвүүлэх (API руу илгээхэд)
+// Англи статусыг монгол руу хөрвүүлэх (API руу илгээхэд)
 const mapEnglishStatusToMongolian = (englishStatus: string): string => {
   switch(englishStatus) {
-    case "approved":
+    case "submitted":
       return "Баталгаажсан";
     case "rejected":
       return "Буцаасан";
@@ -138,7 +139,7 @@ export default function TeacherReviewPage() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/report/teacherreportlist/", {
+      const response = await fetch(`${API_BASE_URL}/api/report/teacherreportlist/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -152,17 +153,27 @@ export default function TeacherReviewPage() {
       if (data.resultCode === 7640 && data.data) {
         const reportList = data.data;
         
-        // API-аас ирсэн өгөгдлийг шууд ашиглах
-        const reports: Report[] = reportList.map((item: any) => {
-          console.log("Тайлангийн мэдээлэл:", item);
+        // report_id-ээр бүлэглэх Map объект
+        const reportsMap = new Map<number, Report>();
+        
+        for (const item of reportList) {
+          const reportId = item.report_id;
           
-          // ★ Backend-ээс ирсэн current_status-г ашиглах
-          const mongolianStatus = item.current_status || "Хүлээн авсан";
+          // Хэрэв энэ ID-тай тайлан аль хэдийн нэмэгдсэн бол цааш үргэлжлүүлэхгүй
+          if (reportsMap.has(reportId)) {
+            console.log(`Тайлан ${reportId} аль хэдийн нэмэгдсэн байна. Давхардахгүй.`);
+            continue;
+          }
+          
+          console.log(`Тайлангийн мэдээлэл ID ${reportId}:`, item);
+          
+          // Backend-ээс ирсэн current_status-г ашиглах
+          const mongolianStatus = item.current_status || "Хүлээгдэж буй";
           const englishStatus = mapMongolianStatusToEnglish(mongolianStatus);
           const reportTitle = item.type_name || "Тайлан";
           
-          return {
-            id: item.report_id,
+          const report: Report = {
+            id: reportId,
             title: reportTitle,
             report_name: item.type_name,
             type_name: item.type_name,
@@ -173,8 +184,8 @@ export default function TeacherReviewPage() {
             type: item.type_name || "Тайлан",
             course: item.course_name || "Хичээл",
             submitted_at: item.submitted_at || new Date().toISOString(),
-            report_status: mongolianStatus,  // ★ Монгол статус хадгалах
-            status: englishStatus,            // ★ Англи статус хадгалах
+            report_status: mongolianStatus,
+            status: englishStatus,
             content: item.content,
             report_data: item.report_data,
             attachments: item.attachments || [],
@@ -184,10 +195,21 @@ export default function TeacherReviewPage() {
             feedback: item.feedback,
             comments: item.comments || [],
           };
-        });
+          
+          // Map-д хадгалах (report_id-ээр)
+          reportsMap.set(reportId, report);
+        }
         
-        console.log("Боловсруулсан тайлангууд:", reports);
-        setReports(reports);
+        // Map-аас массив болгон хөрвүүлэх
+        const uniqueReports = Array.from(reportsMap.values());
+        
+        // Хамгийн сүүлд ирүүлсэнээр эрэмбэлэх
+        uniqueReports.sort((a, b) => 
+          new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+        );
+        
+        console.log("Давхардал арилгасан тайлангууд:", uniqueReports);
+        setReports(uniqueReports);
       } else if (data.resultCode === 8213) {
         setError("Хэрэглэгчийн эрх баталгаажаагүй байна. Дахин нэвтэрнэ үү.");
         setTimeout(() => {
@@ -207,7 +229,7 @@ export default function TeacherReviewPage() {
   // Тайлангийн дэлгэрэнгүй мэдээлэл татах
   const fetchReportDetail = async (reportId: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/report/${reportId}/`, {
+      const response = await fetch(`${API_BASE_URL}/api/report/${reportId}/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -246,7 +268,7 @@ export default function TeacherReviewPage() {
     if (!selectedReport || !commentText.trim()) return false;
     
     try {
-      const response = await fetch(`http://localhost:8000/api/comment/addcomment/${selectedReport.id}/`, {
+      const response = await fetch(`${API_BASE_URL}/api/comment/addcomment/${selectedReport.id}/`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -269,11 +291,11 @@ export default function TeacherReviewPage() {
   const updateReportStatus = async (reportId: number, englishStatus: string, feedback: string) => {
     const mongolianStatus = mapEnglishStatusToMongolian(englishStatus);
     const requestBody = {
-      report_status: mongolianStatus,  // ★ Монгол статус илгээх
+      report_status: mongolianStatus,
       feedback: feedback,
     };
-    
-    const response = await fetch(`http://localhost:8000/api/report/teachereditreportstatus/${reportId}/`, {
+
+    const response = await fetch(`${API_BASE_URL}/api/report/teachereditreportstatus/${reportId}/`, {
       method: "POST",
       credentials: "include",
       headers: {
@@ -364,7 +386,7 @@ export default function TeacherReviewPage() {
             ? { 
                 ...r, 
                 status: "rejected",
-                report_status: "Буцаасан",
+                report_status: "Буцаагдсан",
                 feedback: commentText, 
                 reviewed_at: new Date().toISOString(), 
                 teacher_name: teacherInfo?.name 
@@ -377,7 +399,7 @@ export default function TeacherReviewPage() {
           prev ? { 
             ...prev, 
             status: "rejected",
-            report_status: "Буцаасан",
+            report_status: "Буцаагдсан",
             feedback: commentText, 
             reviewed_at: new Date().toISOString(), 
             teacher_name: teacherInfo?.name 
@@ -415,13 +437,13 @@ export default function TeacherReviewPage() {
     setTimeout(() => notificationDiv.remove(), 3000);
   };
 
-  // ★ Статус badge - backend-ээс ирсэн монгол статусыг шууд харуулах
+  // Статус badge - backend-ээс ирсэн монгол статусыг шууд харуулах
   const getStatusBadge = (reportStatus: string) => {
     switch(reportStatus) {
       case "Баталгаажсан":
         return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1"><FiCheckCircle /> Баталгаажсан</span>;
-      case "Буцаасан":
-        return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Буцаасан</span>;
+      case "Буцаагдсан":
+        return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Буцаагдсан</span>;
       case "Хянаж буй":
         return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1"><FiEye /> Хянаж буй</span>;
       case "Хүлээн авсан":
@@ -432,13 +454,13 @@ export default function TeacherReviewPage() {
   };
 
   const filteredReports = reports.filter(report => {
-    // ★ Статус шүүлтүүрийг report_status (монгол)-оор хийх
     if (filterStatus !== "all") {
       if (filterStatus === "pending" && report.report_status !== "Хүлээн авсан") return false;
       if (filterStatus === "approved" && report.report_status !== "Баталгаажсан") return false;
       if (filterStatus === "rejected" && report.report_status !== "Буцаасан") return false;
     }
-    if (searchQuery && !report.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
+    if (searchQuery && 
+        !report.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
         !report.student.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !report.student_id.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !report.student_email.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -465,7 +487,17 @@ export default function TeacherReviewPage() {
       <Header />
       
       <div className="max-w-7xl mx-auto px-6 py-8">
-        
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Тайлан хянах</h1>
+            <p className="text-gray-600 mt-1 flex items-center gap-2">
+              <FiUser className="text-blue-600" />
+              {teacherInfo?.name} - Багш
+            </p>
+          </div>
+        </div>
+
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
             <FiAlertCircle className="text-xl flex-shrink-0" />
@@ -752,31 +784,6 @@ export default function TeacherReviewPage() {
                       </button>
                     </div>
                   )}
-
-                  {/* Previous Comments
-                  {selectedReport.comments && selectedReport.comments.length > 0 && (
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                      <h4 className="font-medium text-gray-700 mb-3">Өмнөх харилцаанууд</h4>
-                      <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                        {selectedReport.comments.map((comment) => (
-                          <div key={comment.id} className="bg-gray-50 rounded-xl p-3">
-                            <div className="flex justify-between items-start mb-2">
-                              <span className="text-sm font-medium text-gray-900">
-                                {comment.user_name || `Хэрэглэгч ${comment.user_id}`}
-                                <span className="ml-2 text-xs text-gray-500">
-                                  ({comment.user_role === 'teacher' ? 'Багш' : 'Оюутан'})
-                                </span>
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                {new Date(comment.created_at).toLocaleString()}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-700">{comment.comment_text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )} */}
 
                   {selectedReport.report_status !== "Хүлээн авсан" && selectedReport.feedback && (
                     <div className="mt-6 pt-6 border-t border-gray-200">

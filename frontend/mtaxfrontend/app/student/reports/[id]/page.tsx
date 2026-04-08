@@ -14,7 +14,7 @@ import {
 } from "react-icons/fi";
 import Header from "../../../component/Header";
 import Link from "next/link";
-
+import { API_BASE_URL } from "@/app/api/page";
 interface Report {
   report_id: number;
   type_name: string;
@@ -27,7 +27,7 @@ interface ApiResponse {
   data: Report[];
 }
 
-const API_BASE_URL = "http://localhost:8000";
+
 
 export default function ReportsPage() {
   const router = useRouter();

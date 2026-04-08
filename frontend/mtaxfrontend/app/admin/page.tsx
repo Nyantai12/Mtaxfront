@@ -34,6 +34,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import Header from "../component/Header";
+import { API_BASE_URL } from "@/app/api/page";
 
 interface WeeklyReport {
   day: string;
@@ -138,7 +139,7 @@ export default function AdminDashboard() {
   // Долоо хоногийн тайлангийн мэдээлэл татах
   const fetchWeeklyReports = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/report/submittedreportscountlastweek/", {
+      const response = await fetch(`${API_BASE_URL}/api/report/submittedreportscountlastweek/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -168,7 +169,7 @@ export default function AdminDashboard() {
   // ★ Хэрэглэгчийн жагсаалтаас оюутан, багш нарын тоог тоолох
   const fetchUsersStats = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/user/userlist/", {
+      const response = await fetch(`${API_BASE_URL}/api/user/userlist/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -228,7 +229,7 @@ export default function AdminDashboard() {
   const fetchReportStats = async () => {
     try {
       // Нийт тайлан
-      const reportsRes = await fetch("http://localhost:8000/api/report/totalreports/", {
+      const reportsRes = await fetch(`${API_BASE_URL}/api/report/totalreports/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -236,7 +237,7 @@ export default function AdminDashboard() {
       const reportsData = await reportsRes.json();
       
       // Хүлээгдэж буй тайлан
-      const pendingRes = await fetch("http://localhost:8000/api/report/pendingreports/", {
+      const pendingRes = await fetch(`${API_BASE_URL}/api/report/pendingreports/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -260,7 +261,7 @@ export default function AdminDashboard() {
   // Тайлангийн төлөв байдлын мэдээлэл татах
   const fetchReportStatus = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/report/reportstatuscount/", {
+      const response = await fetch(`${API_BASE_URL}/api/report/reportstatuscount/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -283,7 +284,7 @@ export default function AdminDashboard() {
   // Шилдэг оюутнуудын мэдээлэл татах
   const fetchTopStudents = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/report/topstudents/", {
+      const response = await fetch(`${API_BASE_URL}/api/report/topstudents/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -301,7 +302,7 @@ export default function AdminDashboard() {
   // Сүүлийн үйлдлүүдийн мэдээлэл татах
   const fetchRecentActivities = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/report/recentactivities/", {
+      const response = await fetch(`${API_BASE_URL}/api/report/recentactivities/`, {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

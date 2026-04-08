@@ -23,7 +23,7 @@ import {
   FiBookOpen,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
-
+import { API_BASE_URL } from "@/app/api/page";
 interface UserData {
   id: number;
   email: string;
@@ -113,7 +113,7 @@ export default function Header() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await fetch("https://bmtax.mandakh.org/api/organization/organizationlist/", {
+      const response = await fetch(`${API_BASE_URL}/api/organization/organizationlist/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -155,7 +155,7 @@ export default function Header() {
     }
 
     try {
-      const response = await fetch("https://bmtax.mandakh.org/api/organization/addorganization/", {
+      const response = await fetch(`${API_BASE_URL}/api/organization/addorganization/`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -300,60 +300,7 @@ export default function Header() {
             </div>
           </Link>
 
-          {/* Organization Selector - Only for non-admin logged in users */}
-          {user && organizations.length > 0 && !adminStatus && (
-            <div className="hidden md:block relative mx-4">
-              <button
-                onClick={() => setIsOrgMenuOpen(!isOrgMenuOpen)}
-                className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2 hover:border-blue-300 transition min-w-[200px]"
-              >
-                <FiBriefcase className="text-gray-400" />
-                <span className="flex-1 text-left truncate">
-                  {selectedOrg?.org_name || "Байгууллага сонгох"}
-                </span>
-                <FiChevronDown
-                  className={`text-gray-500 transition-transform duration-200 ${
-                    isOrgMenuOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              <AnimatePresence>
-                {isOrgMenuOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute left-0 mt-2 w-full bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50"
-                  >
-                    {organizations.map((org) => (
-                      <button
-                        key={org.org_id}
-                        onClick={() => handleSelectOrganization(org)}
-                        className="w-full px-4 py-2 text-left hover:bg-blue-50 flex items-center justify-between"
-                      >
-                        <span className="truncate">{org.org_name}</span>
-                        {selectedOrg?.org_id === org.org_id && (
-                          <FiCheck className="text-green-500 flex-shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                    <hr className="my-2 border-gray-100" />
-                    <button
-                      onClick={() => {
-                        setIsOrgMenuOpen(false);
-                        setIsAddOrgModalOpen(true);
-                      }}
-                      className="w-full px-4 py-2 text-left text-blue-600 hover:bg-blue-50 flex items-center gap-2"
-                    >
-                      <FiPlus />
-                      <span>Шинэ байгууллага</span>
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
+          
 
           {/* Navigation - Center */}
           <nav className="hidden md:flex items-center gap-1">

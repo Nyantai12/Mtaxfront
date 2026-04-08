@@ -19,7 +19,7 @@ import {
 import { FaGraduationCap } from "react-icons/fa";
 import Link from "next/link";
 import Header from "@/app/component/Header";
-
+import { API_BASE_URL } from "@/app/api/page";
 export default function MyReportsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
