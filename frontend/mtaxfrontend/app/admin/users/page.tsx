@@ -467,13 +467,13 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                 placeholder="Нэр, овог, имэйлээр хайх..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none text-black"
               />
             </div>
             
             {/* Role Filter */}
             <div className="flex gap-3">
-              <div className="relative">
+              <div className="relative text-gray-600">
                 <FiFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <select
                   value={selectedRole}
@@ -640,7 +640,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between text-black">
                   <div className="text-sm text-gray-500">
                     {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsers.length)} / {filteredUsers.length}
                   </div>
@@ -689,18 +689,18 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
             exit={{ scale: 0.95, opacity: 0 }}
             className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
           >
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
+            <h3 className="text-2xl font-bold text-black mb-4">
               Хэрэглэгчийн эрх өөрчлөх
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="text-black mb-4">
               {selectedUser.last_name} {selectedUser.first_name} - {selectedUser.email}
             </p>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-black mb-4">
               Одоогийн эрх: {getDisplayRoleName(selectedUser.role)}
             </p>
             
             <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-black mb-2">
                 Шинэ эрх
               </label>
               <select
@@ -709,13 +709,13 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                   const newRole = e.target.value;
                   setSelectedUser({ ...selectedUser, role: newRole });
                 }}
-                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
+                className="text-black w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
               >
-                
-                <option value="teacher">Багш</option>
+
+                <option value="teacher" className="text-black">Багш</option>
               </select>
-              <p className="text-xs text-gray-500 mt-2">
-                *Зөвхөн багш болон оюутан эрх хооронд өөрчлөх боломжтой
+              <p className="text-xs text-black mt-2">
+                *Зөвхөн оюутаны эрх өөрчлөх боломжтой
               </p>
             </div>
 
