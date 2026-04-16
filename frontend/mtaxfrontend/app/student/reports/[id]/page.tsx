@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { checkAuth } from "../../../../authcheck/page";
+import checkAuth from "../../../../authcheck/page"  
 import {
   FiFileText,
   FiSearch,

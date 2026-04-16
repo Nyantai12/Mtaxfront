@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { checkAuth } from "../../../authcheck/page";
+import checkAuth from "../../../authcheck/page"  
 import {
   FiPlus,
   FiSearch,
