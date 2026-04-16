@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/app/host/page";
+import { API_BASE_URL } from "@/api_base_url/page";
 export async function checkAuth() {
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/check/`, {

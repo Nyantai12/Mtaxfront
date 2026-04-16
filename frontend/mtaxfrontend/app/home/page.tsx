@@ -16,7 +16,7 @@ import { FaUniversity, FaGraduationCap, FaChalkboardTeacher } from "react-icons/
 import Link from "next/link";
 import Header from "../component/Header";
 import Footer from "../component/Footer";
-import { API_BASE_URL } from "@/app/host/page";
+import { API_BASE_URL } from "@/api_base_url/page";
 export default function MandakhHomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff] relative overflow-hidden">

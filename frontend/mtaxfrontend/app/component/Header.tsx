@@ -23,7 +23,7 @@ import {
   FiBookOpen,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
-import { API_BASE_URL } from "@/app/host/page";
+import { API_BASE_URL } from "@/api_base_url/page";
 interface UserData {
   id: number;
   email: string;

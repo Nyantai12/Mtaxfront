@@ -25,7 +25,7 @@ import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/app/component/Header";
-import { API_BASE_URL } from "@/app/host/page";
+import { API_BASE_URL } from "@/api_base_url/page";
 
 // Интерфейсүүд
 interface Report {
