@@ -340,7 +340,7 @@ export default function SelectOrganizationPage() {
                   value={newOrgName}
                   onChange={(e) => setNewOrgName(e.target.value)}
                   placeholder="Жишээ: Мандах ХХК, Глобал Солюшнс ..."
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-black"
                   disabled={isCreating}
                 />
               </div>
