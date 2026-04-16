@@ -21,7 +21,7 @@ import {
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher, FaUserShield } from "react-icons/fa";
 import Header from "@/app/component/Header";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 
 interface User {
   id: number;

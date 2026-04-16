@@ -34,7 +34,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import Header from "../component/Header";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 
 interface WeeklyReport {
   day: string;

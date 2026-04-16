@@ -14,7 +14,7 @@ import {
 } from "react-icons/fi";
 import Header from "../component/Header";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 interface Organization {
   org_id: number;
   org_name: string;

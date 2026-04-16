@@ -14,7 +14,7 @@ import { FaGraduationCap } from "react-icons/fa";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 
 interface UserData {
   id: number;

@@ -22,7 +22,7 @@ import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import Header from "@/app/component/Header";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 import { 
   reportStructure, 
   ALL_FIELD_IDS, 

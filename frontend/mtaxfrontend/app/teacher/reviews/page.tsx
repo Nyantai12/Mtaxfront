@@ -20,7 +20,7 @@ import {
 } from "react-icons/fi";
 import Header from "@/app/component/Header";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 
 // Интерфейсүүд
 interface Report {

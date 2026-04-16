@@ -14,7 +14,7 @@ import {
 } from "react-icons/fi";
 import Header from "../../../component/Header";
 import Link from "next/link";
-import { API_BASE_URL } from "@/app/api/page";
+import { API_BASE_URL } from "@/app/host/page";
 interface Report {
   report_id: number;
   type_name: string;
