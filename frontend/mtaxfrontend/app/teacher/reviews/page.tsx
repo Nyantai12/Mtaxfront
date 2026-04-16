@@ -15,6 +15,8 @@ import {
   FiMail,
   FiAlertCircle,
   FiMessageSquare,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import Header from "@/app/component/Header";
 import { useRouter } from "next/navigation";
@@ -36,8 +38,8 @@ interface Report {
   course?: string;
   course_name?: string;
   submitted_at: string;
-  report_status: string;  // Backend-ээс ирсэн монгол статус
-  status: string;          // Frontend дээр хэрэглэх англи статус
+  report_status: string;
+  status: string;
   content?: string;
   report_data?: any;
   attachments?: string[];
@@ -46,18 +48,6 @@ interface Report {
   reviewed_at?: string;
   feedback?: string;
   comments?: Comment[];
-}
-
-interface TeacherReportListItem {
-  report_id: number;
-  type_name: string;
-  student_name: string;
-  student_id: string;
-  student_email: string;
-  email?: string;
-  submitted_at: string;
-  current_status: string;
-  course_name?: string;
 }
 
 interface TeacherInfo {
@@ -74,28 +64,28 @@ const mapMongolianStatusToEnglish = (mongolianStatus: string): string => {
   switch(mongolianStatus) {
     case "Баталгаажсан":
       return "approved";
-    case "Буцаагдсан":
+    case "Буцаасан":
       return "rejected";
     case "Хянаж буй":
       return "reviewed";
-    case "Хүлээн авсан":
+    case "Хүлээгдэж буй":
       return "pending";
     default:
       return "pending";
   }
 };
 
-// Англи статусыг монгол руу хөрвүүлэх (API руу илгээхэд)
+// Англи статусыг монгол руу хөрвүүлэх
 const mapEnglishStatusToMongolian = (englishStatus: string): string => {
   switch(englishStatus) {
-    case "submitted":
+    case "approved":
       return "Баталгаажсан";
     case "rejected":
       return "Буцаасан";
     case "reviewed":
       return "Хянаж буй";
     default:
-      return "Хүлээн авсан";
+      return "Хүлээгдэж буй";
   }
 };
 
@@ -110,6 +100,10 @@ export default function TeacherReviewPage() {
   const [teacherInfo, setTeacherInfo] = useState<TeacherInfo | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [commentText, setCommentText] = useState("");
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(3);
 
   // Хэрэглэгчийн мэдээлэл авах
   useEffect(() => {
@@ -136,6 +130,12 @@ export default function TeacherReviewPage() {
     }
   }, [teacherInfo]);
 
+  // Хайлт эсвэл шүүлтүүр өөрчлөгдөхөд хуудасны дугаарыг 1 болгох
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedReport(null);
+  }, [filterStatus, searchQuery]);
+
   const fetchReports = async () => {
     setLoading(true);
     try {
@@ -159,13 +159,10 @@ export default function TeacherReviewPage() {
         for (const item of reportList) {
           const reportId = item.report_id;
           
-          // Хэрэв энэ ID-тай тайлан аль хэдийн нэмэгдсэн бол цааш үргэлжлүүлэхгүй
           if (reportsMap.has(reportId)) {
             console.log(`Тайлан ${reportId} аль хэдийн нэмэгдсэн байна. Давхардахгүй.`);
             continue;
           }
-          
-          console.log(`Тайлангийн мэдээлэл ID ${reportId}:`, item);
           
           // Backend-ээс ирсэн current_status-г ашиглах
           const mongolianStatus = item.current_status || "Хүлээгдэж буй";
@@ -196,14 +193,10 @@ export default function TeacherReviewPage() {
             comments: item.comments || [],
           };
           
-          // Map-д хадгалах (report_id-ээр)
           reportsMap.set(reportId, report);
         }
         
-        // Map-аас массив болгон хөрвүүлэх
         const uniqueReports = Array.from(reportsMap.values());
-        
-        // Хамгийн сүүлд ирүүлсэнээр эрэмбэлэх
         uniqueReports.sort((a, b) => 
           new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
         );
@@ -249,7 +242,7 @@ export default function TeacherReviewPage() {
           feedback: reportDetail.feedback,
           comments: reportDetail.comments || [],
           student_email: reportDetail.student_email || prev?.student_email || "",
-          report_status: reportDetail.report_status || prev?.report_status || "Хүлээн авсан",
+          report_status: reportDetail.report_status || prev?.report_status || "Хүлээгдэж буй",
         }));
         
         if (reportDetail.feedback) {
@@ -287,7 +280,7 @@ export default function TeacherReviewPage() {
     }
   };
 
-  // Тайлангийн статус шинэчлэх (монгол статус илгээх)
+  // Тайлангийн статус шинэчлэх
   const updateReportStatus = async (reportId: number, englishStatus: string, feedback: string) => {
     const mongolianStatus = mapEnglishStatusToMongolian(englishStatus);
     const requestBody = {
@@ -313,6 +306,11 @@ export default function TeacherReviewPage() {
     setSelectedReport(report);
     setCommentText(report.feedback || "");
     fetchReportDetail(report.id);
+  };
+
+  // Баталгаажуулах боломжтой эсэх
+  const canApproveOrReject = (reportStatus: string) => {
+    return reportStatus === "Хүлээгдэж буй";
   };
 
   // Баталгаажуулах
@@ -386,7 +384,7 @@ export default function TeacherReviewPage() {
             ? { 
                 ...r, 
                 status: "rejected",
-                report_status: "Буцаагдсан",
+                report_status: "Буцаасан",
                 feedback: commentText, 
                 reviewed_at: new Date().toISOString(), 
                 teacher_name: teacherInfo?.name 
@@ -399,7 +397,7 @@ export default function TeacherReviewPage() {
           prev ? { 
             ...prev, 
             status: "rejected",
-            report_status: "Буцаагдсан",
+            report_status: "Буцаасан",
             feedback: commentText, 
             reviewed_at: new Date().toISOString(), 
             teacher_name: teacherInfo?.name 
@@ -437,25 +435,26 @@ export default function TeacherReviewPage() {
     setTimeout(() => notificationDiv.remove(), 3000);
   };
 
-  // Статус badge - backend-ээс ирсэн монгол статусыг шууд харуулах
+  // Статус badge
   const getStatusBadge = (reportStatus: string) => {
     switch(reportStatus) {
       case "Баталгаажсан":
         return <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1"><FiCheckCircle /> Баталгаажсан</span>;
-      case "Буцаагдсан":
-        return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Буцаагдсан</span>;
+      case "Буцаасан":
+        return <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1"><FiXCircle /> Буцаасан</span>;
       case "Хянаж буй":
         return <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1"><FiEye /> Хянаж буй</span>;
-      case "Хүлээн авсан":
+      case "Хүлээгдэж буй":
         return <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1"><FiClock /> Хүлээгдэж буй</span>;
       default:
         return <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium">{reportStatus}</span>;
     }
   };
 
+  // Шүүлтүүр хийх
   const filteredReports = reports.filter(report => {
     if (filterStatus !== "all") {
-      if (filterStatus === "pending" && report.report_status !== "Хүлээн авсан") return false;
+      if (filterStatus === "pending" && report.report_status !== "Хүлээгдэж буй") return false;
       if (filterStatus === "approved" && report.report_status !== "Баталгаажсан") return false;
       if (filterStatus === "rejected" && report.report_status !== "Буцаасан") return false;
     }
@@ -467,7 +466,22 @@ export default function TeacherReviewPage() {
     return true;
   });
 
-  const pendingCount = reports.filter(r => r.report_status === "Хүлээн авсан").length;
+  // Pagination - одоогийн хуудасны тайлангууд
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentReports = filteredReports.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
+
+  // Хуудас солих функц
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      setSelectedReport(null);
+    }
+  };
+
+  // Статистик тоо
+  const pendingCount = reports.filter(r => r.report_status === "Хүлээгдэж буй").length;
   const approvedCount = reports.filter(r => r.report_status === "Баталгаажсан").length;
   const rejectedCount = reports.filter(r => r.report_status === "Буцаасан").length;
 
@@ -573,7 +587,7 @@ export default function TeacherReviewPage() {
               </div>
             </div>
             
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setFilterStatus("all")}
                 className={`px-4 py-2 rounded-xl font-medium transition ${
@@ -582,7 +596,7 @@ export default function TeacherReviewPage() {
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                Бүгд ({reports.length})
+                Бүгд ({filteredReports.length})
               </button>
               <button
                 onClick={() => setFilterStatus("pending")}
@@ -620,64 +634,141 @@ export default function TeacherReviewPage() {
 
         {/* Reports List and Detail */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Column - Reports List */}
-          <div className="lg:col-span-1 space-y-4">
+          {/* Left Column - Reports List with Pagination */}
+          <div className="lg:col-span-1">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-gray-900">Тайлангууд ({filteredReports.length})</h3>
+              <h3 className="font-semibold text-gray-900">
+                Тайлангууд ({filteredReports.length})
+              </h3>
+              <span className="text-xs text-gray-500">
+                {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, filteredReports.length)} / {filteredReports.length}
+              </span>
             </div>
             
-            {filteredReports.length === 0 ? (
-              <div className="bg-white rounded-2xl p-8 text-center">
-                <FiFileText className="text-4xl text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">Тайлан байхгүй байна</p>
-              </div>
-            ) : (
-              filteredReports.map((report) => (
-                <motion.div
-                  key={report.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => handleSelectReport(report)}
-                  className={`bg-white rounded-2xl p-4 shadow-lg border-2 cursor-pointer transition ${
-                    selectedReport?.id === report.id 
-                      ? "border-blue-500" 
-                      : "border-gray-100 hover:border-blue-300"
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 line-clamp-2 text-base">
-                        {report.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">{report.student}</p>
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
-                        <FiMail className="text-xs" />
-                        {report.student_email}
-                      </p>
-                      <p className="text-xs text-gray-400">{report.student_id}</p>
-                    </div>
-                    <div className="ml-2 flex-shrink-0">
-                      {getStatusBadge(report.report_status)}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
-                    <span className="flex items-center gap-1">
-                      <FiCalendar /> {new Date(report.submitted_at).toLocaleDateString()}
-                    </span>
-                  </div>
+            <div className="space-y-4">
+              {currentReports.length === 0 ? (
+                <div className="bg-white rounded-2xl p-8 text-center">
+                  <FiFileText className="text-4xl text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">Тайлан байхгүй байна</p>
+                </div>
+              ) : (
+                <>
+                  {currentReports.map((report) => (
+                    <motion.div
+                      key={report.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      onClick={() => handleSelectReport(report)}
+                      className={`bg-white rounded-2xl p-4 shadow-lg border-2 cursor-pointer transition ${
+                        selectedReport?.id === report.id 
+                          ? "border-blue-500" 
+                          : "border-gray-100 hover:border-blue-300"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-900 line-clamp-2 text-base">
+                            {report.title}
+                          </h3>
+                          <p className="text-sm text-gray-600 mt-1">{report.student}</p>
+                          <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
+                            <FiMail className="text-xs" />
+                            {report.student_email}
+                          </p>
+                          <p className="text-xs text-gray-400">{report.student_id}</p>
+                        </div>
+                        <div className="ml-2 flex-shrink-0">
+                          {getStatusBadge(report.report_status)}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-2">
+                        <span className="flex items-center gap-1">
+                          <FiCalendar /> {new Date(report.submitted_at).toLocaleDateString()}
+                        </span>
+                      </div>
 
-                  <div className="mt-3 flex gap-2 flex-wrap">
-                    <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
-                      {report.course}
-                    </span>
-                    <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
-                      {report.type}
-                    </span>
-                  </div>
-                </motion.div>
-              ))
-            )}
+                      <div className="mt-3 flex gap-2 flex-wrap">
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                          {report.course}
+                        </span>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                          {report.type}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+
+                  {/* Pagination Component */}
+                  {totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-2 mt-6 pt-4 border-t border-gray-200">
+                      <button
+                        onClick={() => goToPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-lg bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        <FiChevronLeft />
+                      </button>
+                      
+                      <div className="flex gap-1">
+                        {(() => {
+                          const pages = [];
+                          const maxVisible = 5;
+                          
+                          if (totalPages <= maxVisible) {
+                            for (let i = 1; i <= totalPages; i++) {
+                              pages.push(i);
+                            }
+                          } else {
+                            if (currentPage <= 3) {
+                              for (let i = 1; i <= 4; i++) pages.push(i);
+                              pages.push(-1); // separator
+                              pages.push(totalPages);
+                            } else if (currentPage >= totalPages - 2) {
+                              pages.push(1);
+                              pages.push(-1);
+                              for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+                            } else {
+                              pages.push(1);
+                              pages.push(-1);
+                              for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+                              pages.push(-1);
+                              pages.push(totalPages);
+                            }
+                          }
+                          
+                          return pages.map((page, idx) => (
+                            page === -1 ? (
+                              <span key={`sep-${idx}`} className="w-10 h-10 flex items-center justify-center text-gray-400">...</span>
+                            ) : (
+                              <button
+                                key={page}
+                                onClick={() => goToPage(page)}
+                                className={`w-10 h-10 rounded-lg font-medium transition ${
+                                  currentPage === page
+                                    ? "bg-[#0f172a] text-white"
+                                    : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            )
+                          ));
+                        })()}
+                      </div>
+                      
+                      <button
+                        onClick={() => goToPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-lg bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        <FiChevronRight />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {/* Right Column - Report Detail */}
@@ -751,12 +842,12 @@ export default function TeacherReviewPage() {
                       placeholder="Оюутанд хандаж санал шүүмжээ бичнэ үү..."
                       value={commentText}
                       onChange={(e) => setCommentText(e.target.value)}
-                      disabled={selectedReport.report_status !== "Хүлээн авсан" || submitting}
+                      disabled={!canApproveOrReject(selectedReport.report_status) || submitting}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none disabled:bg-gray-50 disabled:text-gray-500"
                     />
                   </div>
 
-                  {selectedReport.report_status === "Хүлээн авсан" && (
+                  {canApproveOrReject(selectedReport.report_status) && (
                     <div className="flex gap-3">
                       <button
                         onClick={handleApprove}
@@ -785,7 +876,7 @@ export default function TeacherReviewPage() {
                     </div>
                   )}
 
-                  {selectedReport.report_status !== "Хүлээн авсан" && selectedReport.feedback && (
+                  {!canApproveOrReject(selectedReport.report_status) && selectedReport.feedback && (
                     <div className="mt-6 pt-6 border-t border-gray-200">
                       <div className="bg-gray-50 rounded-xl p-4">
                         <div className="flex items-center justify-between mb-2">
@@ -799,7 +890,7 @@ export default function TeacherReviewPage() {
                           </div>
                         )}
                         <div className="mt-3 p-3 bg-white rounded-lg">
-                          <p className="text-sm text-gray-700">{selectedReport.feedback}</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedReport.feedback}</p>
                         </div>
                       </div>
                     </div>
