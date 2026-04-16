@@ -28,7 +28,7 @@ import {
   ALL_FIELD_IDS, 
   getCalculationRules,
   type Field 
-} from "@/app/maygt/page";
+} from "@/maygt/page";
 
 interface StudentInfo {
   id: number;

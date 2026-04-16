@@ -28,7 +28,7 @@ import {
   formatAsMoney,
   type Field,
   type Section
-} from "@/app/maygt/page";
+} from "@/maygt/page";
 
 interface Teacher {
   id: number;
