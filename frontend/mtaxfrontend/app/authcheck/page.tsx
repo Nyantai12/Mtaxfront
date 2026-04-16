@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/api_base_url/page";
-export async function checkAuth() {
+export default async function AuthCheck() {
   try {
     const res = await fetch(`${API_BASE_URL}/api/auth/check/`, {
       method: "GET",
