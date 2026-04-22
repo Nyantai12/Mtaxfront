@@ -11,11 +11,13 @@ import {
   FiAlertCircle,
   FiCheckCircle,
   FiRefreshCw,
-  FiLogOut,
+  FiChevronLeft,
+  FiChevronRight as FiChevronRightIcon,
 } from "react-icons/fi";
 import Header from "../../component/Header";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/api_base_url/page";
+
 interface Organization {
   org_id: number;
   org_name: string;
@@ -27,7 +29,6 @@ interface ApiResponse {
   resultMessage: string;
   data: Organization[];
 }
-
 
 export default function SelectOrganizationPage() {
   const router = useRouter();
@@ -41,8 +42,10 @@ export default function SelectOrganizationPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
-
   
+  // Хуудаслалтын state-ууд
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   // Token шинэчлэх функц
   const refreshToken = async () => {
@@ -79,7 +82,6 @@ export default function SelectOrganizationPage() {
           return;
         }
 
-        // Амжилттай нэвтэрсэн бол organizations-ийг ачаална
         await fetchOrganizations();
       } catch (error) {
         console.error("Auth check error:", error);
@@ -98,7 +100,7 @@ export default function SelectOrganizationPage() {
     return () => {
       mounted = false;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchOrganizations = async (isRetry = false) => {
     setIsLoading(true);
@@ -127,17 +129,15 @@ export default function SelectOrganizationPage() {
 
       if (data.resultCode === 7220) {
         setOrganizations(data.data || []);
+        setCurrentPage(1); // Шинэ өгөгдөл ирэхэд эхний хуудас руу буцах
       } else if (data.resultCode === 8213) {
-        // Token expired - token шинэчлэх
         if (!isRetry) {
           console.log("Token expired, attempting refresh...");
           const refreshed = await refreshToken();
           
           if (refreshed) {
-            // Token амжилттай шинэчлэгдсэн бол дахин оролдох
             return fetchOrganizations(true);
           } else {
-            // Token шинэчлэгдэхгүй бол logout
             setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
             localStorage.clear();
             setTimeout(() => {
@@ -200,13 +200,11 @@ export default function SelectOrganizationPage() {
         await fetchOrganizations();
         setTimeout(() => setSuccess(""), 3000);
       } else if (data.resultCode === 8213) {
-        // Token expired - token шинэчлэх
         const refreshed = await refreshToken();
         
         if (refreshed) {
-          // Token амжилттай шинэчлэгдсэн бол дахин оролдох
-          setError(""); // Clear error
-          await handleCreateOrganization(e); // Retry
+          setError("");
+          await handleCreateOrganization(e);
         } else {
           setError("Таны нэвтрэлт дууссан байна. Дахин нэвтрэнэ үү.");
           localStorage.clear();
@@ -235,11 +233,73 @@ export default function SelectOrganizationPage() {
     router.push(`/student/reports/new?org_id=${orgId}`);
   };
 
+  // Хайлт хийсэн үр дүнг шүүх
   const filteredOrganizations = organizations.filter(org =>
     org.org_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Эхний ачааллалт хийж байгаа эсэхийг шалгах
+  // Хуудаслалтын тооцоолол
+  const totalPages = Math.ceil(filteredOrganizations.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentOrganizations = filteredOrganizations.slice(startIndex, endIndex);
+
+  // Хуудас солих функцууд
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Хуудасны дугааруудыг үүсгэх функц
+  const getPageNumbers = () => {
+    const pageNumbers = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) {
+          pageNumbers.push(i);
+        }
+        pageNumbers.push('...');
+        pageNumbers.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pageNumbers.push(1);
+        pageNumbers.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) {
+          pageNumbers.push(i);
+        }
+      } else {
+        pageNumbers.push(1);
+        pageNumbers.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pageNumbers.push(i);
+        }
+        pageNumbers.push('...');
+        pageNumbers.push(totalPages);
+      }
+    }
+    
+    return pageNumbers;
+  };
+
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
@@ -275,7 +335,6 @@ export default function SelectOrganizationPage() {
             >
               <FiRefreshCw className={`text-xl ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
-            
           </div>
         </div>
 
@@ -308,7 +367,10 @@ export default function SelectOrganizationPage() {
               type="text"
               placeholder="Байгууллага хайх..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1); // Хайлт хийхэд эхний хуудас руу буцах
+              }}
               className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-black"
             />
           </div>
@@ -371,43 +433,104 @@ export default function SelectOrganizationPage() {
             <p className="text-gray-600">Түр хүлээнэ үү...</p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredOrganizations.length > 0 ? (
-              filteredOrganizations.map((org) => (
-                <motion.div
-                  key={org.org_id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  whileHover={{ scale: 1.02 }}
-                  onClick={() => handleSelectOrganization(org.org_id)}
-                  className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 cursor-pointer hover:shadow-2xl transition"
-                >
-                  <div className="w-14 h-14 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
-                    <FiHome className="text-blue-700 text-2xl" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">{org.org_name}</h3>
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-500">
-                      {org.created_at ? new Date(org.created_at).toLocaleDateString() : 'Тодорхойгүй'}
+          <>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {currentOrganizations.length > 0 ? (
+                currentOrganizations.map((org) => (
+                  <motion.div
+                    key={org.org_id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    whileHover={{ scale: 1.02 }}
+                    onClick={() => handleSelectOrganization(org.org_id)}
+                    className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 cursor-pointer hover:shadow-2xl transition"
+                  >
+                    <div className="w-14 h-14 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
+                      <FiHome className="text-blue-700 text-2xl" />
                     </div>
-                    <FiChevronRight className="text-blue-600" />
-                  </div>
-                </motion.div>
-              ))
-            ) : (
-              <div className="col-span-full text-center py-12">
-                <FiHome className="text-6xl text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">Танд одоогоор байгууллага байхгүй байна</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{org.org_name}</h3>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-500">
+                        {org.created_at ? new Date(org.created_at).toLocaleDateString() : 'Тодорхойгүй'}
+                      </div>
+                      <FiChevronRight className="text-blue-600" />
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="col-span-full text-center py-12">
+                  <FiHome className="text-6xl text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 mb-4">
+                    {searchTerm ? "Таны хайлтад тохирох байгууллага олдсонгүй" : "Танд одоогоор байгууллага байхгүй байна"}
+                  </p>
+                  {!searchTerm && (
+                    <button
+                      onClick={() => setShowCreateForm(true)}
+                      className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition inline-flex items-center gap-2"
+                    >
+                      <FiPlus />
+                      Шинэ байгууллага үүсгэх
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Хуудаслалтын хэсэг */}
+            {totalPages > 1 && (
+              <div className="mt-12 flex justify-center items-center gap-2">
                 <button
-                  onClick={() => setShowCreateForm(true)}
-                  className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition inline-flex items-center gap-2"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 1}
+                  className={`p-2 rounded-lg transition ${
+                    currentPage === 1
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-blue-300"
+                  }`}
                 >
-                  <FiPlus />
-                  Шинэ байгууллага үүсгэх
+                  <FiChevronLeft className="text-lg" />
+                </button>
+
+                <div className="flex gap-2">
+                  {getPageNumbers().map((page, index) => (
+                    <button
+                      key={index}
+                      onClick={() => typeof page === 'number' && goToPage(page)}
+                      className={`px-4 py-2 rounded-lg transition ${
+                        currentPage === page
+                          ? "bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white shadow-md"
+                          : page === '...'
+                          ? "bg-transparent text-gray-500 cursor-default"
+                          : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-blue-300"
+                      }`}
+                      disabled={page === '...'}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className={`p-2 rounded-lg transition ${
+                    currentPage === totalPages
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 hover:border-blue-300"
+                  }`}
+                >
+                  <FiChevronRightIcon className="text-lg" />
                 </button>
               </div>
             )}
-          </div>
+
+            {/* Мэдээллийн текст */}
+            {filteredOrganizations.length > 0 && (
+              <div className="mt-4 text-center text-sm text-gray-500">
+                Нийт {filteredOrganizations.length} байгууллагаас {startIndex + 1} - {Math.min(endIndex, filteredOrganizations.length)} харуулж байна
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

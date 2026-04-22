@@ -10,16 +10,11 @@ import {
   FiClock,
   FiEye,
   FiSearch,
-  FiFilter,
-  FiUser,
   FiCalendar,
-  FiArrowLeft,
-  FiHome,
-  FiMail,
-  FiStar,
   FiMessageSquare,
-  FiDownload,
   FiAlertCircle,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
@@ -27,24 +22,25 @@ import { useRouter } from "next/navigation";
 import Header from "@/app/component/Header";
 import { API_BASE_URL } from "@/api_base_url/page";
 
-// Интерфейсүүд
 interface Report {
   id: number;
-  title: string;
+  report_name: string;
   type_name: string;
   type_id: number;
   status: string;
   current_status?: string;
   created_at: string;
-  submitted_at: string;
+  submission_date: string;
   reviewed_at?: string;
   teacher_name?: string;
   teacher_email?: string;
+  teacher_comment?: string;
   feedback?: string;
   report_data?: any;
   org_name?: string;
   first_name?: string;
   last_name?: string;
+  org_id?: number;
 }
 
 interface StudentInfo {
@@ -56,17 +52,29 @@ interface StudentInfo {
   student_id: string;
 }
 
+interface Pagination {
+  currentPage: number;
+  itemsPerPage: number;
+  totalPages: number;
+  totalItems: number;
+}
+
 export default function StudentMyReportsPage() {
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
+  
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    itemsPerPage: 6,
+    totalPages: 1,
+    totalItems: 0,
+  });
 
-  // Статусыг маппинг хийх функц
   const mapStatus = (status: string): string => {
     switch(status) {
       case "Хүлээгдэж буй":
@@ -82,7 +90,6 @@ export default function StudentMyReportsPage() {
     }
   };
 
-  // Хэрэглэгчийн мэдээлэл авах
   useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
@@ -100,7 +107,6 @@ export default function StudentMyReportsPage() {
     }
   }, [router]);
 
-  // Тайлангийн жагсаалт татах
   useEffect(() => {
     if (studentInfo?.id) {
       fetchMyReports();
@@ -114,13 +120,10 @@ export default function StudentMyReportsPage() {
       const response = await fetch(`${API_BASE_URL}/api/report/submissionlist/`, {
         method: "GET",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
       });
 
       const data = await response.json();
-      console.log("Миний тайлангууд (жагсаалт):", data);
 
       if (data.resultCode === 6130 && data.data) {
         const reportList = data.data;
@@ -131,29 +134,21 @@ export default function StudentMyReportsPage() {
           return;
         }
 
-        // report_id-ээр бүлэглэх Map объект
         const reportsMap = new Map<number, Report>();
 
         for (const item of reportList) {
           const reportId = item.report_id;
           
-          // Хэрэв энэ ID-тай тайлан аль хэдийн нэмэгдсэн бол цааш үргэлжлүүлэхгүй
-          if (reportsMap.has(reportId)) {
-            console.log(`Тайлан ${reportId} аль хэдийн нэмэгдсэн байна. Давхардахгүй.`);
-            continue;
-          }
+          if (reportsMap.has(reportId)) continue;
 
           try {
             const detailResponse = await fetch(`${API_BASE_URL}/api/report/${reportId}/`, {
               method: "GET",
               credentials: "include",
-              headers: {
-                "Content-Type": "application/json",
-              },
+              headers: { "Content-Type": "application/json" },
             });
             
             const detailData = await detailResponse.json();
-            console.log(`Тайлан ${reportId} дэлгэрэнгүй:`, detailData);
             
             let report: Report;
             
@@ -163,16 +158,17 @@ export default function StudentMyReportsPage() {
 
               report = {
                 id: reportData.report_id || reportId,
-                title: reportData.type_name || item.type_name || `Тайлан ${reportId}`,
+                report_name: reportData.report_name || item.type_name || `Тайлан (${reportData.report_id || reportId})`,
                 type_name: reportData.type_name || item.type_name || "Тайлан",
                 type_id: reportData.type_id || item.report_type_id,
                 status: mappedStatus,
                 current_status: item.current_status,
                 created_at: reportData.created_at || item.submission_date || new Date().toISOString(),
-                submitted_at: reportData.submitted_at || item.submission_date || "",
+                submission_date: reportData.submission_date || item.submission_date || "",
                 reviewed_at: reportData.reviewed_at,
-                teacher_name: reportData.teacher_name,
+                teacher_name: reportData.teacher_name || item.teacher_name,
                 teacher_email: reportData.teacher_email,
+                teacher_comment: reportData.teacher_comment || item.teacher_comment,
                 feedback: reportData.feedback,
                 report_data: reportData.report_data,
                 org_name: item.org_name,
@@ -180,20 +176,20 @@ export default function StudentMyReportsPage() {
                 last_name: item.last_name,
               };
             } else {
-              // Дэлгэрэнгүй мэдээлэл байхгүй бол жагсаалтын мэдээллээр үүсгэх
               const mappedStatus = mapStatus(item.current_status);
               report = {
                 id: reportId,
-                title: item.type_name || `Тайлан ${reportId}`,
+                report_name: item.type_name,
                 type_name: item.type_name || "Тайлан",
                 type_id: item.report_type_id,
                 status: mappedStatus,
                 current_status: item.current_status,
                 created_at: item.submission_date || new Date().toISOString(),
-                submitted_at: item.submission_date || "",
+                submission_date: item.submission_date || "",
                 reviewed_at: undefined,
-                teacher_name: undefined,
+                teacher_name: item.teacher_name,
                 teacher_email: undefined,
+                teacher_comment: item.teacher_comment,
                 feedback: undefined,
                 report_data: undefined,
                 org_name: item.org_name,
@@ -202,25 +198,23 @@ export default function StudentMyReportsPage() {
               };
             }
             
-            // Map-д хадгалах (report_id-ээр)
             reportsMap.set(reportId, report);
             
-          } catch (err) {
-            console.error(`Тайлан ${reportId} дэлгэрэнгүй татахад алдаа:`, err);
-            // Алдаа гарсан ч жагсаалтын мэдээллээр нэмэх
+          } catch {
             const mappedStatus = mapStatus(item.current_status);
             const report: Report = {
               id: reportId,
-              title: item.type_name || `Тайлан ${reportId}`,
+              report_name: item.type_name,
               type_name: item.type_name || "Тайлан",
               type_id: item.report_type_id,
               status: mappedStatus,
               current_status: item.current_status,
               created_at: item.submission_date || new Date().toISOString(),
-              submitted_at: item.submission_date || "",
+              submission_date: item.submission_date || "",
               reviewed_at: undefined,
-              teacher_name: undefined,
+              teacher_name: item.teacher_name,
               teacher_email: undefined,
+              teacher_comment: item.teacher_comment,
               feedback: undefined,
               report_data: undefined,
               org_name: item.org_name,
@@ -231,27 +225,29 @@ export default function StudentMyReportsPage() {
           }
         }
         
-        // Map-аас массив болгон хөрвүүлэх
         const uniqueReports = Array.from(reportsMap.values());
         
-        // Хамгийн сүүлд илгээсэнээр эрэмбэлэх
         uniqueReports.sort((a, b) => 
-          new Date(b.submitted_at || b.created_at).getTime() - 
-          new Date(a.submitted_at || a.created_at).getTime()
+          new Date(b.submission_date || b.created_at).getTime() - 
+          new Date(a.submission_date || a.created_at).getTime()
         );
         
-        console.log("Давхардал арилгасан тайлангууд:", uniqueReports);
         setReports(uniqueReports);
+        
+        setPagination(prev => ({
+          ...prev,
+          totalItems: uniqueReports.length,
+          totalPages: Math.ceil(uniqueReports.length / prev.itemsPerPage),
+          currentPage: 1,
+        }));
+        
       } else if (data.resultCode === 8213) {
         setError("Хэрэглэгчийн эрх баталгаажаагүй байна. Дахин нэвтэрнэ үү.");
-        setTimeout(() => {
-          router.push("/login");
-        }, 2000);
+        setTimeout(() => router.push("/login"), 2000);
       } else {
         setError(data.resultMessage || "Тайлан ачаалахад алдаа гарлаа");
       }
-    } catch (error) {
-      console.error("Тайлан ачаалахад алдаа:", error);
+    } catch {
       setError("Сервертэй холбогдоход алдаа гарлаа");
     } finally {
       setLoading(false);
@@ -263,7 +259,7 @@ export default function StudentMyReportsPage() {
       (status === "pending" ? "Хүлээгдэж буй" :
        status === "reviewed" ? "Хянаж буй" :
        status === "approved" ? "Баталгаажсан" :
-       status === "rejected" ? "Татгалзсан" : "Хүлээгдэж буй");
+       status === "rejected" ? "Буцаасан" : "Хүлээгдэж буй");
     
     switch(status) {
       case "pending":
@@ -299,20 +295,54 @@ export default function StudentMyReportsPage() {
     }
   };
 
-  const filteredReports = reports.filter(report => {
-    if (filterStatus !== "all" && report.status !== filterStatus) return false;
-    if (searchQuery && 
-        !report.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !report.type_name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !(report.org_name && report.org_name.toLowerCase().includes(searchQuery.toLowerCase()))) 
-      return false;
-    return true;
-  });
+  const getFilteredReports = () => {
+    return reports.filter(report => {
+      if (filterStatus !== "all" && report.status !== filterStatus) return false;
+      if (searchQuery && 
+          !report.report_name.toLowerCase().includes(searchQuery.toLowerCase()) && 
+          !report.type_name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          !(report.org_name && report.org_name.toLowerCase().includes(searchQuery.toLowerCase()))) 
+        return false;
+      return true;
+    });
+  };
+
+  const filteredReports = getFilteredReports();
+  
+  const getPaginatedReports = () => {
+    const startIndex = (pagination.currentPage - 1) * pagination.itemsPerPage;
+    const endIndex = startIndex + pagination.itemsPerPage;
+    return filteredReports.slice(startIndex, endIndex);
+  };
+
+  const paginatedReports = getPaginatedReports();
+  
+  useEffect(() => {
+    setPagination(prev => ({
+      ...prev,
+      totalItems: filteredReports.length,
+      totalPages: Math.ceil(filteredReports.length / prev.itemsPerPage),
+      currentPage: 1,
+    }));
+  }, [filterStatus, searchQuery, reports.length]);
+
+  const goToPage = (page: number) => {
+    if (page < 1 || page > pagination.totalPages) return;
+    setPagination(prev => ({ ...prev, currentPage: page }));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const goToReportDetail = (reportId: number, orgId?: number) => {
+    if (orgId) {
+      router.push(`/student/reports/view/${reportId}?org_id=${orgId}`);
+    } else {
+      router.push(`/student/reports/view/${reportId}`);
+    }
+  };
 
   const pendingCount = reports.filter(r => r.status === "pending").length;
   const approvedCount = reports.filter(r => r.status === "approved").length;
   const rejectedCount = reports.filter(r => r.status === "rejected").length;
-  const reviewedCount = reports.filter(r => r.status === "reviewed").length;
 
   if (loading) {
     return (
@@ -330,7 +360,6 @@ export default function StudentMyReportsPage() {
       <Header />
       
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Миний тайлангууд</h1>
@@ -348,7 +377,6 @@ export default function StudentMyReportsPage() {
           </Link>
         </div>
 
-        {/* Error Message */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
             <FiAlertCircle className="text-xl flex-shrink-0" />
@@ -357,7 +385,6 @@ export default function StudentMyReportsPage() {
           </div>
         )}
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -417,7 +444,7 @@ export default function StudentMyReportsPage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500">Татгалзсан</p>
+                <p className="text-sm text-gray-500">Буцаасан</p>
                 <p className="text-3xl font-bold text-red-600">{rejectedCount}</p>
               </div>
               <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
@@ -427,7 +454,6 @@ export default function StudentMyReportsPage() {
           </motion.div>
         </div>
 
-        {/* Search and Filter */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-8">
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex-1 min-w-[300px]">
@@ -447,9 +473,7 @@ export default function StudentMyReportsPage() {
               <button
                 onClick={() => setFilterStatus("all")}
                 className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "all" 
-                    ? "bg-[#0f172a] text-white" 
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  filterStatus === "all" ? "bg-[#0f172a] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 Бүгд ({reports.length})
@@ -457,9 +481,7 @@ export default function StudentMyReportsPage() {
               <button
                 onClick={() => setFilterStatus("pending")}
                 className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "pending" 
-                    ? "bg-yellow-500 text-white" 
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  filterStatus === "pending" ? "bg-yellow-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 Хүлээгдэж буй ({pendingCount})
@@ -467,9 +489,7 @@ export default function StudentMyReportsPage() {
               <button
                 onClick={() => setFilterStatus("approved")}
                 className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "approved" 
-                    ? "bg-green-500 text-white" 
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  filterStatus === "approved" ? "bg-green-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 Баталгаажсан ({approvedCount})
@@ -477,18 +497,15 @@ export default function StudentMyReportsPage() {
               <button
                 onClick={() => setFilterStatus("rejected")}
                 className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "rejected" 
-                    ? "bg-red-500 text-white" 
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  filterStatus === "rejected" ? "bg-red-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                Татгалзсан ({rejectedCount})
+                Буцаасан ({rejectedCount})
               </button>
             </div>
           </div>
         </div>
 
-        {/* Reports Grid */}
         {filteredReports.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center shadow-lg border border-gray-200">
             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -508,199 +525,140 @@ export default function StudentMyReportsPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredReports.map((report, index) => (
-              <motion.div
-                key={report.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => setSelectedReport(report)}
-                className={`bg-white rounded-2xl p-5 shadow-lg border-2 cursor-pointer transition hover:shadow-xl ${
-                  selectedReport?.id === report.id 
-                    ? "border-blue-500" 
-                    : "border-gray-100 hover:border-blue-300"
-                }`}
-              >
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 text-lg mb-1 line-clamp-1">
-                      {report.title}
-                    </h3>
-                    <p className="text-sm text-gray-500">{report.type_name}</p>
-                    {report.org_name && (
-                      <p className="text-xs text-gray-400 mt-1">{report.org_name}</p>
-                    )}
-                  </div>
-                  {getStatusBadge(report.status, report.current_status)}
-                </div>
-                
-                <div className="space-y-2 mt-3">
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <FiCalendar className="text-gray-400" />
-                    <span>Илгээсэн: {new Date(report.submitted_at || report.created_at).toLocaleDateString()}</span>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedReports.map((report, index) => (
+                <motion.div
+                  key={report.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="bg-white rounded-2xl p-5 shadow-lg border-2 border-gray-100 hover:border-blue-300 hover:shadow-xl transition cursor-pointer"
+                  onClick={() => goToReportDetail(report.id, report.org_id)}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 text-lg mb-1 line-clamp-1">
+                        {report.report_name}
+                      </h3>
+                      {report.org_name && (
+                        <p className="text-xs text-gray-400 mt-1">Компани : {report.org_name}</p>
+                      )}
+                    </div>
+                    {getStatusBadge(report.status, report.current_status)}
                   </div>
                   
-                  {report.status !== "pending" && report.teacher_name && (
+                  <div className="space-y-2 mt-3">
                     <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <FaChalkboardTeacher className="text-gray-400" />
-                      <span>Багш: {report.teacher_name}</span>
+                      <FiCalendar className="text-gray-400" />
+                      <span>Илгээсэн: {new Date(report.submission_date || report.created_at).toLocaleDateString()}</span>
                     </div>
-                  )}
-                  
-                  {report.status === "approved" && (
-                    <div className="flex items-center gap-2 text-xs text-green-600">
-                      <FiCheckCircle />
-                      <span>Баталгаажсан</span>
-                    </div>
-                  )}
-                  
-                  {report.status === "rejected" && report.feedback && (
-                    <div className="flex items-start gap-2 text-xs text-red-600">
-                      <FiMessageSquare className="mt-0.5" />
-                      <span className="line-clamp-2">{report.feedback}</span>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="mt-4 pt-3 border-t border-gray-100">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedReport(report);
-                    }}
-                    className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center justify-center gap-1"
-                  >
-                    <FiEye />
-                    Дэлгэрэнгүй харах
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {/* Report Detail Modal */}
-        {selectedReport && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedReport(null)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Modal Header */}
-              <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-2xl">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{selectedReport.title}</h2>
-                    <p className="text-gray-500 mt-1">{selectedReport.type_name}</p>
-                    {selectedReport.org_name && (
-                      <p className="text-sm text-gray-500 mt-1">Байгууллага: {selectedReport.org_name}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setSelectedReport(null)}
-                    className="p-2 hover:bg-gray-100 rounded-lg transition"
-                  >
-                    <FiXCircle className="text-gray-500 text-xl" />
-                  </button>
-                </div>
-              </div>
-              
-              {/* Modal Content */}
-              <div className="p-6 space-y-6">
-                {/* Status */}
-                <div className="flex justify-between items-center p-4 bg-gray-50 rounded-xl">
-                  <span className="text-gray-600">Статус:</span>
-                  {getStatusBadge(selectedReport.status, selectedReport.current_status)}
-                </div>
-                
-                {/* Dates */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-gray-50 rounded-xl">
-                    <p className="text-xs text-gray-500 mb-1">Илгээсэн огноо</p>
-                    <p className="font-medium text-gray-900">
-                      {new Date(selectedReport.submitted_at || selectedReport.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  {selectedReport.reviewed_at && (
-                    <div className="p-4 bg-gray-50 rounded-xl">
-                      <p className="text-xs text-gray-500 mb-1">Хянасан огноо</p>
-                      <p className="font-medium text-gray-900">
-                        {new Date(selectedReport.reviewed_at).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Teacher Info */}
-                {selectedReport.teacher_name && (
-                  <div className="p-4 bg-blue-50 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FaChalkboardTeacher className="text-blue-600" />
-                      <h3 className="font-semibold text-gray-900">Хянасан багш</h3>
-                    </div>
-                    <p className="text-gray-700">{selectedReport.teacher_name}</p>
-                    {selectedReport.teacher_email && (
-                      <p className="text-sm text-gray-500 mt-1">{selectedReport.teacher_email}</p>
-                    )}
-                  </div>
-                )}
-                
-                {/* Feedback */}
-                {selectedReport.feedback && (
-                  <div className={`p-4 rounded-xl ${
-                    selectedReport.status === "approved" ? "bg-green-50" : "bg-red-50"
-                  }`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <FiMessageSquare className={selectedReport.status === "approved" ? "text-green-600" : "text-red-600"} />
-                      <h3 className="font-semibold text-gray-900">Багшийн сэтгэгдэл</h3>
-                    </div>
-                    <p className="text-gray-700 whitespace-pre-wrap">{selectedReport.feedback}</p>
-                  </div>
-                )}
-                
-                {/* Report Data */}
-                {selectedReport.report_data && Object.keys(selectedReport.report_data).length > 0 && (
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-3">Тайлангийн мэдээлэл</h3>
-                    <div className="bg-gray-50 rounded-xl p-4 max-h-[300px] overflow-y-auto">
-                      <div className="space-y-2">
-                        {Object.entries(selectedReport.report_data)
-                          .sort(([a], [b]) => parseInt(a) - parseInt(b))
-                          .map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center border-b border-gray-200 py-2">
-                              <span className="text-sm font-medium text-gray-600">Мөр {key}</span>
-                              <span className="text-sm text-gray-900">{Number(value).toLocaleString()} ₮</span>
-                            </div>
-                          ))}
+                    
+                    {report.status !== "pending" && report.teacher_name && (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <FaChalkboardTeacher className="text-gray-400" />
+                        <span>Багш: {report.teacher_name}</span>
                       </div>
+                    )}
+                    
+                    {report.status === "approved" && report.teacher_comment && (
+                      <div className="flex items-start gap-2 text-xs text-green-600">
+                        <FiCheckCircle className="mt-0.5 flex-shrink-0" />
+                        <span className="line-clamp-2">{report.teacher_comment}</span>
+                      </div>
+                    )}
+                    
+                    {report.status === "rejected" && report.teacher_comment && (
+                      <div className="flex items-start gap-2 text-xs text-red-600">
+                        <FiMessageSquare className="mt-0.5 flex-shrink-0" />
+                        <span className="line-clamp-2">{report.teacher_comment}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t border-gray-100">
+                    <div className="w-full text-center text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center justify-center gap-1">
+                      <FiEye />
+                      Дэлгэрэнгүй харах
                     </div>
                   </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 pt-4 border-t border-gray-200">
-                  {selectedReport.status === "rejected" && (
-                    <Link
-                      href={`/student/tax-report/${selectedReport.id}`}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition text-center"
-                    >
-                      Засварлах
-                    </Link>
-                  )}
-                  <button
-                    onClick={() => setSelectedReport(null)}
-                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-300 transition"
-                  >
-                    Хаах
-                  </button>
+                </motion.div>
+              ))}
+            </div>
+            
+            {pagination.totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-8">
+                <button
+                  onClick={() => goToPage(pagination.currentPage - 1)}
+                  disabled={pagination.currentPage === 1}
+                  className={`p-2 rounded-xl transition ${
+                    pagination.currentPage === 1
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <FiChevronLeft className="text-lg" />
+                </button>
+                
+                <div className="flex gap-1">
+                  {Array.from({ length: pagination.totalPages }, (_, i) => i + 1).map((page) => {
+                    if (pagination.totalPages > 7) {
+                      if (page === 1 || page === pagination.totalPages || 
+                          (page >= pagination.currentPage - 1 && page <= pagination.currentPage + 1)) {
+                        return (
+                          <button
+                            key={page}
+                            onClick={() => goToPage(page)}
+                            className={`w-10 h-10 rounded-xl font-medium transition ${
+                              pagination.currentPage === page
+                                ? "bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white"
+                                : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        );
+                      } else if (page === pagination.currentPage - 2 || page === pagination.currentPage + 2) {
+                        return <span key={page} className="w-10 h-10 flex items-center justify-center">...</span>;
+                      }
+                      return null;
+                    }
+                    
+                    return (
+                      <button
+                        key={page}
+                        onClick={() => goToPage(page)}
+                        className={`w-10 h-10 rounded-xl font-medium transition ${
+                          pagination.currentPage === page
+                            ? "bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white"
+                            : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    );
+                  })}
                 </div>
+                
+                <button
+                  onClick={() => goToPage(pagination.currentPage + 1)}
+                  disabled={pagination.currentPage === pagination.totalPages}
+                  className={`p-2 rounded-xl transition ${
+                    pagination.currentPage === pagination.totalPages
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <FiChevronRight className="text-lg" />
+                </button>
               </div>
-            </motion.div>
-          </div>
+            )}
+            
+            <div className="text-center text-sm text-gray-500 mt-4">
+              {filteredReports.length} -ийн {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1} -{" "}
+              {Math.min(pagination.currentPage * pagination.itemsPerPage, filteredReports.length)} -г харуулж байна
+            </div>
+          </>
         )}
       </div>
     </div>
