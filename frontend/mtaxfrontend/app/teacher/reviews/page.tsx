@@ -1,4 +1,5 @@
-// app/teacher/reviews/page.tsx
+export const dynamic = 'force-dynamic';
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -225,7 +226,6 @@ export default function TeacherReviewPage() {
           
           if (reportsMap.has(reportId)) continue;
           
-          // Оюутны нэрийг зөв форматлах
           let displayStudentName = item.student_name || "Оюутан";
           if ((!displayStudentName || displayStudentName === "") && (item.student_first_name || item.student_last_name)) {
             displayStudentName = `${item.student_last_name || ''} ${item.student_first_name || ''}`.trim();
@@ -255,7 +255,6 @@ export default function TeacherReviewPage() {
             reviewed_at: item.reviewed_at || item.checked_date,
             feedback: item.feedback,
             comments: item.comments || [],
-            // Байгууллагын мэдээлэл - org_name шууд item-ээс авна
             org_id: item.org_id,
             org_name: item.org_name,
             tax_period_year: item.tax_period_year,
@@ -652,7 +651,6 @@ export default function TeacherReviewPage() {
           </div>
         )}
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
@@ -703,7 +701,6 @@ export default function TeacherReviewPage() {
           </div>
         </div>
 
-        {/* Search and Filter */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-8">
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex-1 min-w-[300px]">
@@ -790,7 +787,6 @@ export default function TeacherReviewPage() {
             </div>
           </div>
           
-          {/* Status Filter Buttons */}
           <div className="flex gap-2 flex-wrap mt-4">
             <button
               onClick={() => handleFilterChange("all")}
@@ -827,9 +823,7 @@ export default function TeacherReviewPage() {
           </div>
         </div>
 
-        {/* Reports List and Detail */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Column - Reports List */}
           <div className="lg:col-span-1">
             <div className="space-y-4">
               {currentReports.length === 0 ? (
@@ -866,7 +860,6 @@ export default function TeacherReviewPage() {
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                             <FiMail className="text-xs" /> {report.student_email}
                           </p>
-                          {/* Байгууллагын нэр харуулах */}
                           {report.org_name && (
                             <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                               <FiHome className="text-xs" /> {report.org_name}
@@ -886,7 +879,6 @@ export default function TeacherReviewPage() {
                     </motion.div>
                   ))}
 
-                  {/* Pagination */}
                   {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-2 mt-6 pt-4 border-t border-gray-200">
                       <button
@@ -954,7 +946,6 @@ export default function TeacherReviewPage() {
             </div>
           </div>
 
-          {/* Right Column - Report Detail with Actions */}
           <div className="lg:col-span-2">
             {selectedReport ? (
               <motion.div
@@ -978,7 +969,6 @@ export default function TeacherReviewPage() {
                       <span className="flex items-center gap-1">
                         <FiCalendar /> Илгээсэн: {formatDate(selectedReport.submitted_at)}
                       </span>
-                      {/* Байгууллагын нэр харуулах */}
                       {selectedReport.org_name && (
                         <span className="flex items-center gap-1">
                           <FiHome /> Байгууллага: {selectedReport.org_name}
