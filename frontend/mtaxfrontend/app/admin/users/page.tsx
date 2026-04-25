@@ -28,7 +28,7 @@ interface User {
   email: string;
   first_name: string;
   last_name: string;
-  role: string;  // 'role' field from backend
+  role: string;
   user_status?: string;
   created_at?: string;
   last_login?: string;
@@ -48,6 +48,7 @@ export default function AdminUsersPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentAdminId, setCurrentAdminId] = useState<number | null>(null);
+  const [updatingRole, setUpdatingRole] = useState(false);
 
   // Get current admin ID from localStorage
   useEffect(() => {
@@ -70,9 +71,8 @@ export default function AdminUsersPage() {
 
   // Filter users based on search term and role
   useEffect(() => {
-    let filtered = users;
+    let filtered = [...users];
     
-    // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(user => 
         user.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -81,7 +81,6 @@ export default function AdminUsersPage() {
       );
     }
     
-    // Filter by role
     if (selectedRole !== "all") {
       filtered = filtered.filter(user => {
         const normalizedRole = normalizeUserRole(user.role);
@@ -134,13 +133,6 @@ export default function AdminUsersPage() {
         throw new Error(data.resultMessage || "Хэрэглэгчийн мэдээлэл авахад алдаа гарлаа");
       }
 
-      // Log original roles
-      console.log("Original user roles:", usersList.map(u => ({ 
-        id: u.id, 
-        role: u.role, 
-        name: `${u.last_name} ${u.first_name}` 
-      })));
-
       setUsers(usersList);
       setFilteredUsers(usersList);
     } catch (err: any) {
@@ -156,36 +148,21 @@ export default function AdminUsersPage() {
     if (!role) return "student";
     
     const roleLower = role?.toLowerCase().trim();
-    console.log(`Normalizing role: "${role}" -> "${roleLower}"`);
     
-    // Admin шалгалт
-    if (roleLower === "admin" || 
-        roleLower === "administrator" || 
-        roleLower === "superadmin") {
+    if (roleLower === "admin" || roleLower === "administrator" || roleLower === "superadmin") {
       return "admin";
     }
     
-    // Teacher/Bagsh шалгалт
-    if (roleLower === "teacher" || 
-        roleLower === "bagsh" || 
-        roleLower === "professor") {
+    if (roleLower === "teacher" || roleLower === "bagsh" || roleLower === "professor") {
       return "teacher";
     }
     
-    // Student шалгалт
-    if (roleLower === "student" || 
-        roleLower === "oyutan") {
-      return "student";
-    }
-    
-    console.log(`Unknown role: "${role}", defaulting to student`);
     return "student";
   };
 
   // Get display role name in Mongolian
   const getDisplayRoleName = (role: string) => {
     const normalized = normalizeUserRole(role);
-    console.log(`Getting display name for role: "${role}" -> normalized: "${normalized}"`);
     
     switch (normalized) {
       case "admin":
@@ -225,83 +202,79 @@ export default function AdminUsersPage() {
     }
   };
 
-  // app/admin/users/page.tsx - handleUpdateRole функцийг шинэчлэх
-
-// Update user role - Зөвхөн багш, оюутан хооронд өөрчлөх
-const handleUpdateRole = async (userId: number, newRole: string) => {
-  // Админ эрх өгөхөөс сэргийлэх
-  if (newRole === "admin") {
-    setError("Админ эрх өгөх боломжгүй. Зөвхөн багш эсвэл оюутан эрх өгч болно.");
-    setTimeout(() => setError(null), 3000);
-    return;
-  }
-
-  setIsLoading(true);
-  setError(null);
-
-  try {
-    let endpoint = "";
-    let method = "POST";
-    
-    // Шинэ эрхээс хамаарч endpoint сонгох
-    if (newRole === "teacher") {
-      endpoint = `${API_BASE_URL}/api/user/setteacher/`;
-      method = "POST";
-    } else if (newRole === "student") {
-      endpoint = `${API_BASE_URL}/api/user/setstudent/`; // Энэ endpoint байх ёстой
-      method = "POST";
-    } else {
-      throw new Error("Буруу эрх сонголт");
+  // Update user role
+  const handleUpdateRole = async (userId: number, targetRole: string) => {
+    // Админ эрх өгөхөөс сэргийлэх
+    if (targetRole === "admin") {
+      setError("Админ эрх өгөх боломжгүй. Зөвхөн багш эсвэл оюутан эрх өгч болно.");
+      setTimeout(() => setError(null), 3000);
+      return;
     }
 
-    const response = await fetch(endpoint, {
-      method: method,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ id: userId }),
-    });
+    setUpdatingRole(true);
+    setError(null);
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const responseText = await response.text();
-    let data;
-    
     try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      console.error("Failed to parse JSON:", e);
-      throw new Error("Серверээс JSON хариу ирсэнгүй");
-    }
+      let endpoint = "";
+      
+      // Шинэ эрхээс хамаарч endpoint сонгох
+      if (targetRole === "teacher") {
+        endpoint = `${API_BASE_URL}/api/user/setteacher/`;
+      } else {
+        // Зөвхөн teacher эрх өгөх боломжтой (backend-д student эрх буцаах endpoint байхгүй)
+        throw new Error("Зөвхөн багш эрх өгөх боломжтой");
+      }
 
-    // Backend-ээс ирэх resultCode-г шалгах
-    // 7720: Амжилттай (teacher), 7820: Амжилттай (student) гэж үзье
-    if (data.resultCode === 7720 || data.resultCode === 7820) {
-      setSuccessMessage("Хэрэглэгчийн эрх амжилттай шинэчлэгдлээ");
-      fetchUsers(); // Refresh the list
-      setIsEditModalOpen(false);
-      setSelectedUser(null);
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } else {
-      throw new Error(data.resultMessage || "Хэрэглэгчийн эрх шинэчлэхэд алдаа гарлаа");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: userId }),
+      });
+
+      const responseText = await response.text();
+      let data;
+      
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error("Failed to parse JSON:", e);
+        throw new Error("Серверээс JSON хариу ирсэнгүй");
+      }
+
+      // Backend-ээс ирэх resultCode 7720: Амжилттай
+      if (data.resultCode === 7720) {
+        setSuccessMessage("Хэрэглэгчийн эрх амжилттай шинэчлэгдлээ");
+        
+        // Жагсаалтыг шинэчлэх
+        const updatedUsers = users.map(user => 
+          user.id === userId 
+            ? { ...user, role: targetRole }
+            : user
+        );
+        setUsers(updatedUsers);
+        
+        setIsEditModalOpen(false);
+        setSelectedUser(null);
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } else {
+        throw new Error(data.resultMessage || "Хэрэглэгчийн эрх шинэчлэхэд алдаа гарлаа");
+      }
+    } catch (err: any) {
+      console.error("Error updating user role:", err);
+      setError(err.message || "Хэрэглэгчийн эрх шинэчлэхэд алдаа гарлаа");
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setUpdatingRole(false);
     }
-  } catch (err: any) {
-    console.error("Error updating user role:", err);
-    setError(err.message || "Хэрэглэгчийн эрх шинэчлэхэд алдаа гарлаа");
-    setTimeout(() => setError(null), 3000);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   // Delete user
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
     
-    // Өөрийгөө устгахаас сэргийлэх
     if (selectedUser.id === currentAdminId) {
       setError("Та өөрийгөө устгах боломжгүй");
       setTimeout(() => setError(null), 3000);
@@ -319,10 +292,13 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
 
       if (response.ok) {
         setSuccessMessage("Хэрэглэгч амжилттай устгагдлаа");
-        fetchUsers();
+        
+        // Жагсаалтыг шинэчлэх
+        const updatedUsers = users.filter(user => user.id !== selectedUser.id);
+        setUsers(updatedUsers);
+        
         setIsDeleteModalOpen(false);
         setSelectedUser(null);
-        
         setTimeout(() => setSuccessMessage(null), 3000);
       } else {
         throw new Error("Хэрэглэгч устгахад алдаа гарлаа");
@@ -346,15 +322,16 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
     ]);
     
     const csvContent = [headers, ...csvData].map(row => row.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `users_${new Date().toISOString()}.csv`);
+    link.setAttribute("download", `users_${new Date().toISOString().split("T")[0]}.csv`);
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Pagination
@@ -459,7 +436,6 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
         {/* Filters and Search */}
         <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
           <div className="flex flex-col md:flex-row gap-4 justify-between">
-            {/* Search */}
             <div className="flex-1 relative">
               <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
@@ -471,14 +447,13 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
               />
             </div>
             
-            {/* Role Filter */}
             <div className="flex gap-3">
-              <div className="relative text-gray-600">
+              <div className="relative text-black">
                 <FiFilter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <select
                   value={selectedRole}
                   onChange={(e) => setSelectedRole(e.target.value)}
-                  className="pl-10 pr-8 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none appearance-none bg-white"
+                  className="pl-10 pr-8 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none appearance-none bg-white text-black"
                 >
                   <option value="all">Бүх эрх</option>
                   <option value="admin">Админ</option>
@@ -487,7 +462,6 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                 </select>
               </div>
               
-              {/* Export Button */}
               <button
                 onClick={exportToCSV}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
@@ -531,24 +505,12 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        ID
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Хэрэглэгч
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Имэйл
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Эрх
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Бүртгэгдсэн
-                      </th>
-                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Үйлдэл
-                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Хэрэглэгч</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Имэйл</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Эрх</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Бүртгэгдсэн</th>
+                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Үйлдэл</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -563,9 +525,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                           animate={{ opacity: 1 }}
                           className="hover:bg-gray-50 transition"
                         >
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {user.id}
-                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.id}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center">
                               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-3">
@@ -575,9 +535,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                                 <div className="text-sm font-medium text-gray-900">
                                   {user.last_name} {user.first_name}
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  {user.email}
-                                </div>
+                                <div className="text-xs text-gray-500">{user.email}</div>
                               </div>
                             </div>
                           </td>
@@ -603,15 +561,15 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end gap-2">
-                              {/* Зөвхөн админ биш хэрэглэгчдийг засварлах боломжтой */}
-                              {normalizedRole !== "admin" && (
+                              {/* Оюутан хэрэглэгчийг багш болгох */}
+                              {normalizedRole === "student" && (
                                 <button
                                   onClick={() => {
                                     setSelectedUser(user);
                                     setIsEditModalOpen(true);
                                   }}
                                   className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                  title="Эрх өөрчлөх"
+                                  title="Багш болгох"
                                 >
                                   <FiEdit2 />
                                 </button>
@@ -640,7 +598,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between text-black">
+                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
                   <div className="text-sm text-gray-500">
                     {indexOfFirstItem + 1} - {Math.min(indexOfLastItem, filteredUsers.length)} / {filteredUsers.length}
                   </div>
@@ -659,7 +617,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                         className={`px-3 py-1 rounded-lg ${
                           currentPage === number
                             ? "bg-purple-600 text-white"
-                            : "border border-gray-300 hover:bg-gray-50"
+                            : "border border-gray-300 hover:bg-gray-50 text-black"
                         }`}
                       >
                         {number}
@@ -680,7 +638,7 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
         </div>
       </div>
 
-      {/* Edit Role Modal */}
+      {/* Edit Role Modal - Зөвхөн оюутныг багш болгох */}
       {isEditModalOpen && selectedUser && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <motion.div
@@ -689,35 +647,22 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
             exit={{ scale: 0.95, opacity: 0 }}
             className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
           >
-            <h3 className="text-2xl font-bold text-black mb-4">
-              Хэрэглэгчийн эрх өөрчлөх
+            <h3 className="text-2xl font-bold text-gray-900 mb-4">
+              Хэрэглэгчийг багш болгох
             </h3>
-            <p className="text-black mb-4">
+            <p className="text-gray-600 mb-4">
               {selectedUser.last_name} {selectedUser.first_name} - {selectedUser.email}
             </p>
-            <p className="text-sm text-black mb-4">
+            <p className="text-sm text-gray-500 mb-2">
               Одоогийн эрх: {getDisplayRoleName(selectedUser.role)}
             </p>
-            
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-black mb-2">
-                Шинэ эрх
-              </label>
-              <select
-                value={normalizeUserRole(selectedUser.role)}
-                onChange={(e) => {
-                  const newRole = e.target.value;
-                  setSelectedUser({ ...selectedUser, role: newRole });
-                }}
-                className="text-black w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-600 outline-none"
-              >
+            <p className="text-sm text-blue-600 mb-6">
+              Шинэ эрх: Багш
+            </p>
 
-                <option value="teacher" className="text-black">Багш</option>
-              </select>
-              <p className="text-xs text-black mt-2">
-                *Зөвхөн оюутаны эрх өөрчлөх боломжтой
-              </p>
-            </div>
+            <p className="text-xs text-gray-500 mb-6">
+              *Энэ хэрэглэгчийг багш эрхтэй болгох уу?
+            </p>
 
             <div className="flex gap-3">
               <button
@@ -730,10 +675,16 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
                 Цуцлах
               </button>
               <button
-                onClick={() => handleUpdateRole(selectedUser.id, selectedUser.role)}
-                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                onClick={() => handleUpdateRole(selectedUser.id, "teacher")}
+                disabled={updatingRole}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Хадгалах
+                {updatingRole ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <FaChalkboardTeacher />
+                )}
+                Багш болгох
               </button>
             </div>
           </motion.div>
@@ -753,7 +704,8 @@ const handleUpdateRole = async (userId: number, newRole: string) => {
               Хэрэглэгч устгах
             </h3>
             <p className="text-gray-600 mb-6">
-              Та {selectedUser.last_name} {selectedUser.first_name} ({selectedUser.email}) хэрэглэгчийг устгахдаа итгэлтэй байна уу? Энэ үйлдлийг буцаах боломжгүй.
+              Та {selectedUser.last_name} {selectedUser.first_name} ({selectedUser.email}) хэрэглэгчийг устгахдаа итгэлтэй байна уу?<br />
+              Энэ үйлдлийг буцаах боломжгүй.
             </p>
 
             <div className="flex gap-3">

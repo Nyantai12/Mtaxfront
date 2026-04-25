@@ -369,7 +369,7 @@ export default function StudentMyReportsPage() {
             </p>
           </div>
           <Link
-            href="/student/reports"
+            href="/student/select-organization/"
             className="mt-4 md:mt-0 inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium hover:opacity-90 transition"
           >
             <FiFileText />

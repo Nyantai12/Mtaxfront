@@ -208,17 +208,37 @@ export default function Header() {
     router.refresh();
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("userId");
-    localStorage.removeItem("token");
-    localStorage.removeItem("selectedOrganization");
-
-    window.dispatchEvent(new Event('auth-change'));
-    setIsMenuOpen(false);
-    router.push("/");
-  };
+  // components/Header.tsx - handleLogout функцийг өөрчлөх
+const handleLogout = () => {
+  // 1. localStorage-с бүх өгөгдлийг устгах
+  localStorage.removeItem("user");
+  localStorage.removeItem("userRole");
+  localStorage.removeItem("userId");
+  localStorage.removeItem("token");
+  localStorage.removeItem("selectedOrganization");
+  localStorage.removeItem("userRole");
+  localStorage.removeItem("isAdmin");
+  
+  // 2. Session storage-с устгах (хэрэв байвал)
+  sessionStorage.clear();
+  
+  // 3. Хэрэглэгчийн state-г цэвэрлэх
+  setUser(null);
+  setOrganizations([]);
+  setSelectedOrg(null);
+  setIsMenuOpen(false);
+  
+  // 4. Auth change event dispatch хийх
+  window.dispatchEvent(new Event('auth-change'));
+  
+  // 5. Нүүр хуудас руу чиглүүлэх
+  router.push("/");
+  
+  // 6. Хуудасны кэшийг цэвэрлэх (hard refresh биш, soft navigation)
+  setTimeout(() => {
+    window.location.reload(); // Эсвэл router.refresh()
+  }, 100);
+};
 
   const getUserDisplayName = () => {
     if (user?.first_name && user?.last_name) {
@@ -396,17 +416,7 @@ export default function Header() {
                   <FiUsers />
                   Хэрэглэгчид
                 </Link>
-                <Link
-                  href="/admin/reports"
-                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
-                    isActive("/admin/reports")
-                      ? "text-purple-600 bg-purple-50"
-                      : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
-                  }`}
-                >
-                  <FiFileText />
-                  Тайлангууд
-                </Link>
+                
               </>
             )}
             

@@ -9,6 +9,8 @@ import {
   FiBookOpen,
   FiChevronRight,
   FiAlertCircle,
+  FiCheckCircle,
+  FiXCircle,
 } from "react-icons/fi";
 import { FaGraduationCap } from "react-icons/fa";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -41,6 +43,8 @@ export default function AuthContent() {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -60,12 +64,14 @@ export default function AuthContent() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     setError("");
+    setSuccessMessage("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setSuccessMessage("");
 
     if (!formData.email || !formData.password) {
       setError("Имэйл болон нууц үгээ оруулна уу");
@@ -108,13 +114,10 @@ export default function AuthContent() {
         credentials: "include",
       });
 
-      const setCookieHeader = response.headers.get('set-cookie');
-      console.log("Set-Cookie header:", setCookieHeader);
-
       const responseText = await response.text();
-      console.log("Login response:", responseText);
+      console.log("Response:", responseText);
 
-      let data: LoginResponse;
+      let data;
       try {
         data = JSON.parse(responseText);
       } catch (e) {
@@ -122,7 +125,36 @@ export default function AuthContent() {
         throw new Error("Серверээс JSON хариу ирсэнгүй");
       }
 
-      if (data.resultCode === 8110 || data.resultCode === 8010) {
+      // Бүртгүүлэх үед
+      if (!isLogin) {
+        if (data.resultCode === 8010 || data.resultCode === 8011) {
+          // Амжилттай бүртгүүлсэн
+          setShowVerificationMessage(true);
+          setSuccessMessage("Бүртгэл амжилттай үүслээ! Таны имэйл хаяг руу баталгаажуулах холбоос илгээлээ.");
+          // Формыг цэвэрлэх
+          setFormData({
+            email: "",
+            password: "",
+            first_name: "",
+            last_name: "",
+          });
+          setIsLoading(false);
+          return;
+        } else if (data.resultCode === 8012) {
+          setError("Энэ имэйл хаяг аль хэдийн баталгаажсан байна. Та нэвтрэх хэсэг рүү орно уу.");
+          setIsLoading(false);
+          return;
+        } else if (data.resultCode === 8013) {
+          setError("Таны бүртгэл хаагдсан байна. Администратортой холбоо барина уу.");
+          setIsLoading(false);
+          return;
+        } else {
+          throw new Error(data.resultMessage || "Бүртгүүлэхэд алдаа гарлаа");
+        }
+      }
+
+      // Нэвтрэх үед
+      if (data.resultCode === 8110) {
         if (data.data && data.data.length > 0) {
           const userData = data.data[0];
           
@@ -138,15 +170,63 @@ export default function AuthContent() {
         } else {
           throw new Error("Хэрэглэгчийн мэдээлэл олдсонгүй");
         }
+      } else if (data.resultCode === 8213) {
+        setError("Нэвтрэх эрхгүй байна. Та бүртгэлээ баталгаажуулсан эсэхээ шалгана уу.");
+        setIsLoading(false);
+        return;
       } else {
-        throw new Error(data.resultMessage || "Алдаа гарлаа");
+        throw new Error(data.resultMessage || "Нэвтрэхэд алдаа гарлаа");
       }
     } catch (err: any) {
       console.error("Auth error:", err);
       setError(err.message || "Серверт холбогдоход алдаа гарлаа");
-    } finally {
       setIsLoading(false);
     }
+  };
+
+  // Verification Message Component
+  const VerificationMessage = () => {
+    if (!showVerificationMessage) return null;
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl"
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+            <FiCheckCircle className="text-green-600 text-xl" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-green-800 mb-1">Бүртгэл амжилттай үүслээ!</h3>
+            <p className="text-sm text-green-700 mb-2">{successMessage}</p>
+            <p className="text-xs text-green-600">
+              Имэйлээ шалгаж, баталгаажуулах холбоос дээр дарна уу. 
+              Баталгаажсаны дараа та системд нэвтрэх боломжтой болно.
+            </p>
+            <button
+              onClick={() => {
+                setShowVerificationMessage(false);
+                setIsLogin(true);
+                const url = new URL(window.location.href);
+                url.searchParams.delete('register');
+                window.history.pushState({}, '', url.toString());
+              }}
+              className="mt-3 text-sm text-green-700 hover:text-green-800 font-medium flex items-center gap-1"
+            >
+              Нэвтрэх хэсэг рүү орох <FiChevronRight className="text-xs" />
+            </button>
+          </div>
+          <button
+            onClick={() => setShowVerificationMessage(false)}
+            className="text-green-500 hover:text-green-700"
+          >
+            <FiXCircle />
+          </button>
+        </div>
+      </motion.div>
+    );
   };
 
   return (
@@ -213,6 +293,7 @@ export default function AuthContent() {
                   onClick={() => {
                     setIsLogin(true);
                     setError("");
+                    setShowVerificationMessage(false);
                     const url = new URL(window.location.href);
                     url.searchParams.delete('register');
                     window.history.pushState({}, '', url.toString());
@@ -229,6 +310,7 @@ export default function AuthContent() {
                   onClick={() => {
                     setIsLogin(false);
                     setError("");
+                    setShowVerificationMessage(false);
                     const url = new URL(window.location.href);
                     url.searchParams.set('register', 'true');
                     window.history.pushState({}, '', url.toString());
@@ -254,7 +336,15 @@ export default function AuthContent() {
                 <h2 className="text-2xl font-bold text-gray-900">
                   {isLogin ? "Системд нэвтрэх" : "Шинэ хэрэглэгч бүртгүүлэх"}
                 </h2>
+                {!isLogin && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    Бүртгүүлсний дараа имэйл хаяг руу тань баталгаажуулах холбоос илгээгдэнэ
+                  </p>
+                )}
               </div>
+
+              {/* Verification Message */}
+              <VerificationMessage />
 
               {error && (
                 <motion.div
@@ -306,9 +396,9 @@ export default function AuthContent() {
                 )}
 
                 <div>
-                  <label className="text-sm font-medium text-black">Имэйл</label>
+                  <label className="text-sm font-medium text-gray-700">Имэйл</label>
                   <div className="relative mt-2">
-                    <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-black" />
+                    <FiMail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="email"
                       name="email"
@@ -325,7 +415,7 @@ export default function AuthContent() {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Нууц үг</label>
                   <div className="relative mt-2">
-                    <FiLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <FiLock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="password"
                       name="password"
@@ -373,6 +463,134 @@ export default function AuthContent() {
               </div>
             </div>
           </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// Email Verification Page Component
+export function EmailVerificationPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isVerifying, setIsVerifying] = useState(true);
+  const [verificationStatus, setVerificationStatus] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const token = searchParams.get('token');
+    
+    if (!token) {
+      setVerificationStatus({
+        success: false,
+        message: "Баталгаажуулах холбоос буруу байна."
+      });
+      setIsVerifying(false);
+      return;
+    }
+
+    const verifyEmail = async () => {
+      setIsVerifying(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/verifyuser/${token}/`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        const data = await response.json();
+        
+        if (data.resultCode === 7920) {
+          setVerificationStatus({
+            success: true,
+            message: "Таны имэйл хаяг амжилттай баталгаажлаа! Та одоо системд нэвтрэх боломжтой."
+          });
+        } else if (data.resultCode === 8213) {
+          setVerificationStatus({
+            success: false,
+            message: "Баталгаажуулах холбоосны хугацаа дууссан эсвэл буруу байна. Дахин бүртгүүлнэ үү."
+          });
+        } else {
+          setVerificationStatus({
+            success: false,
+            message: data.resultMessage || "Баталгаажуулахад алдаа гарлаа. Дахин оролдоно уу."
+          });
+        }
+      } catch (error) {
+        console.error("Verification error:", error);
+        setVerificationStatus({
+          success: false,
+          message: "Серверт холбогдоход алдаа гарлаа. Дахин оролдоно уу."
+        });
+      } finally {
+        setIsVerifying(false);
+      }
+    };
+
+    verifyEmail();
+  }, [searchParams]);
+
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Имэйл хаяг баталгаажиж байна...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff] px-6">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="max-w-md w-full"
+      >
+        <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+          {verificationStatus?.success ? (
+            <>
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FiCheckCircle className="text-green-600 text-4xl" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Баталгаажлаа!</h1>
+              <p className="text-gray-600 mb-6">{verificationStatus.message}</p>
+              <button
+                onClick={() => router.push("/auth")}
+                className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-semibold hover:opacity-95 transition"
+              >
+                Нэвтрэх
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FiXCircle className="text-red-600 text-4xl" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Алдаа гарлаа</h1>
+              <p className="text-gray-600 mb-6">{verificationStatus?.message}</p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => router.push("/auth?register=true")}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition"
+                >
+                  Дахин бүртгүүлэх
+                </button>
+                <button
+                  onClick={() => router.push("/")}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition"
+                >
+                  Нүүр хуудас
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
     </div>

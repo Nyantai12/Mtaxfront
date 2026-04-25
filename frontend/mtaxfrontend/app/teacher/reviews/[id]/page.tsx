@@ -16,6 +16,7 @@ import {
   FiDownload,
   FiPrinter,
   FiAlertCircle,
+  FiBriefcase,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
@@ -39,6 +40,13 @@ interface StudentInfo {
   department?: string;
 }
 
+interface OrganizationInfo {
+  org_id: number;
+  org_name: string;
+  org_type?: string;
+  org_register?: string;
+}
+
 interface ReportInfo {
   id: number;
   report_name: string;
@@ -48,9 +56,10 @@ interface ReportInfo {
   created_at: string;
   updated_at: string;
   submitted_at?: string;
-  status: string;
+  current_status: string;
   values: Record<string, string>;
   student: StudentInfo;
+  organization?: OrganizationInfo;
   feedback?: string;
   reviewed_at?: string;
   teacher_id?: number;
@@ -74,19 +83,41 @@ const getMonthName = (month: number): string => {
   return months[month - 1] || `${month} сар`;
 };
 
-const getStatusBadge = (status: string) => {
-  const statusMap: Record<string, { label: string; color: string; icon: JSX.Element }> = {
-    pending: { label: "Хүлээгдэж буй", color: "bg-yellow-100 text-yellow-700", icon: <FiClock /> },
-    reviewed: { label: "Хянаж буй", color: "bg-blue-100 text-blue-700", icon: <FiMessageSquare /> },
-    approved: { label: "Баталгаажсан", color: "bg-green-100 text-green-700", icon: <FiCheckCircle /> },
-    rejected: { label: "Татгалзсан", color: "bg-red-100 text-red-700", icon: <FiXCircle /> },
-  };
+const getStatusBadge = (current_status: string) => {
+  const status = current_status?.toLowerCase() || "";
   
-  const info = statusMap[status] || { label: status, color: "bg-gray-100 text-gray-700", icon: <FiClock /> };
+  if (status === "хүлээгдэж буй" || status === "pending" || status === "submitted") {
+    return (
+      <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium flex items-center gap-1">
+        <FiClock className="text-yellow-600" /> Хүлээгдэж буй
+      </span>
+    );
+  } 
+  else if (status === "хянаж буй" || status === "reviewing" || status === "in_review" || status === "reviewed") {
+    return (
+      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium flex items-center gap-1">
+        <FiMessageSquare className="text-blue-600" /> Хянаж буй
+      </span>
+    );
+  } 
+  else if (status === "баталгаажсан" || status === "approved" || status === "accepted" || status === "completed") {
+    return (
+      <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center gap-1">
+        <FiCheckCircle className="text-green-600" /> Баталгаажсан
+      </span>
+    );
+  } 
+  else if (status === "буцаасан" || status === "татгалзсан" || status === "rejected" || status === "returned" || status === "declined") {
+    return (
+      <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium flex items-center gap-1">
+        <FiXCircle className="text-red-600" /> Буцаасан
+      </span>
+    );
+  }
   
   return (
-    <span className={`px-3 py-1 ${info.color} rounded-full text-xs font-medium flex items-center gap-1`}>
-      {info.icon} {info.label}
+    <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs font-medium flex items-center gap-1">
+      <FiClock /> {current_status || "Тодорхойгүй"}
     </span>
   );
 };
@@ -116,7 +147,6 @@ const getCalculationRules = () => ({
   "58": (getValue: (id: string) => number) => getValue("31") + getValue("51") - getValue("52") - getValue("53") - getValue("56") - getValue("57"),
 });
 
-// Тооцоолол хийх функц
 const calculateField = (fieldId: string, values: Record<string, string>): number => {
   const getValue = (id: string): number => {
     const val = values[id];
@@ -135,7 +165,6 @@ const calculateField = (fieldId: string, values: Record<string, string>): number
   return getValue(fieldId);
 };
 
-// Backend бүтцээс утгуудыг гаргаж авах
 const extractValuesFromStructure = (sections: any[]): Record<string, string> => {
   const extractedValues: Record<string, string> = {};
   
@@ -172,7 +201,6 @@ export default function TeacherReportViewPage() {
   const [calculatedValues, setCalculatedValues] = useState<Record<string, number>>({});
   const [teacherName, setTeacherName] = useState<string>("");
 
-  // Хэрэглэгчийн мэдээлэл авах
   useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
@@ -205,13 +233,10 @@ export default function TeacherReportViewPage() {
         const reportData = data.data;
         let reportValues: Record<string, string> = {};
 
-        // report_data -аас утгуудыг задлах
         if (reportData.report_data) {
           if (typeof reportData.report_data === "object" && reportData.report_data.sections) {
-            // Хэрэв sections бүтэцтэй бол
             reportValues = extractValuesFromStructure(reportData.report_data.sections);
           } else if (typeof reportData.report_data === "object" && !reportData.report_data.sections) {
-            // Хэрэв шууд values объект бол
             reportValues = reportData.report_data;
           } else if (typeof reportData.report_data === "string") {
             try {
@@ -227,7 +252,6 @@ export default function TeacherReportViewPage() {
           }
         }
 
-        // Тооцоолсон утгуудыг үүсгэх
         const calculated: Record<string, number> = {};
         ALL_FIELD_IDS.forEach(id => {
           calculated[id] = calculateField(id, reportValues);
@@ -236,7 +260,6 @@ export default function TeacherReportViewPage() {
         setValues(reportValues);
         setCalculatedValues(calculated);
 
-        // Оюутны мэдээллийг бүрдүүлэх
         let studentInfo: StudentInfo = {
           id: reportData.student_id || 0,
           first_name: "",
@@ -259,6 +282,28 @@ export default function TeacherReportViewPage() {
           }
         }
 
+        // Байгууллагын мэдээлэл авах
+        let organizationInfo: OrganizationInfo | undefined = undefined;
+        if (reportData.org_id && reportData.org_name) {
+          organizationInfo = {
+            org_id: reportData.org_id,
+            org_name: reportData.org_name,
+          };
+        } else if (reportData.organization) {
+          organizationInfo = {
+            org_id: reportData.organization.org_id,
+            org_name: reportData.organization.org_name,
+          };
+        }
+
+        let finalStatus = reportData.current_status;
+        if (!finalStatus || finalStatus === "") {
+          finalStatus = reportData.report_status;
+        }
+        if (!finalStatus || finalStatus === "") {
+          finalStatus = "pending";
+        }
+
         setReport({
           id: reportData.report_id || reportData.id || parseInt(reportId),
           report_name: reportData.type_name || reportData.report_name || "Татварын тайлан",
@@ -267,11 +312,12 @@ export default function TeacherReportViewPage() {
           tax_period_month: reportData.tax_period_month || new Date().getMonth() + 1,
           created_at: reportData.created_at || new Date().toISOString(),
           updated_at: reportData.updated_at || new Date().toISOString(),
-          submitted_at: reportData.submitted_at,
-          status: reportData.status || "pending",
+          submitted_at: reportData.submission_date || reportData.submitted_at,
+          current_status: finalStatus,
           values: reportValues,
+          organization: organizationInfo,
           feedback: reportData.feedback || reportData.teacher_comment,
-          reviewed_at: reportData.reviewed_at,
+          reviewed_at: reportData.checked_date || reportData.reviewed_at,
           teacher_id: reportData.teacher_id,
           teacher_name: reportData.teacher_name,
           student: studentInfo,
@@ -349,6 +395,26 @@ export default function TeacherReportViewPage() {
       ));
   };
 
+  const formatDateToMongolian = (dateString: string) => {
+    const date = new Date(dateString);
+    const months = [
+      "Нэгдүгээр сар", "Хоёрдугаар сар", "Гуравдугаар сар", "Дөрөвдүгээр сар",
+      "Тавдугаар сар", "Зургаадугаар сар", "Долдугаар сар", "Наймдугаар сар",
+      "Есдүгээр сар", "Аравдугаар сар", "Арван нэгдүгээр сар", "Арван хоёрдугаар сар"
+    ];
+    
+    const year = date.getFullYear();
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    
+    return {
+      date: `${year} оны ${month}н ${day}`,
+      time: `${hours}:${minutes}`,
+    };
+  };
+
   const summaryValues = [
     { id: "31", label: "Нийтлэг хувь хэмжээгээр ногдуулсан татвар", value: getValue("31") },
     { id: "51", label: "Тусгай хувь хэмжээгээр ногдуулсан татвар", value: getValue("51") },
@@ -360,36 +426,25 @@ export default function TeacherReportViewPage() {
     window.print();
   };
 
-  const handleExport = () => {
-    const headers = ["Мөр", "Үзүүлэлт", "Дүн (₮)"];
-    const rows: string[][] = [];
+  // Буцах функц - статусаас хамаарч filter параметр нэмэх
+  const handleGoBack = () => {
+    if (!report) {
+      router.push("/teacher/reviews");
+      return;
+    }
     
-    const collectFields = (fields: Field[], level: number = 0) => {
-      fields.sort((a, b) => a.order - b.order).forEach((field) => {
-        rows.push([
-          field.id,
-          " ".repeat(level * 2) + field.label,
-          getDisplayValue(field.id).replace(" ₮", ""),
-        ]);
-        if (field.children?.length) {
-          collectFields(field.children, level + 1);
-        }
-      });
-    };
+    let statusFilter = "all";
+    const status = report.current_status?.toLowerCase() || "";
     
-    collectFields(reportStructure.sections.flatMap((s) => s.fields));
+    if (status === "хүлээгдэж буй" || status === "pending" || status === "submitted") {
+      statusFilter = "pending";
+    } else if (status === "баталгаажсан" || status === "approved" || status === "accepted" || status === "completed") {
+      statusFilter = "approved";
+    } else if (status === "буцаасан" || status === "татгалзсан" || status === "rejected" || status === "returned" || status === "declined") {
+      statusFilter = "rejected";
+    }
     
-    const csvContent = [headers, ...rows].map(row => row.join(",")).join("\n");
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `report_${reportId}_${new Date().toISOString().split("T")[0]}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    router.push(`/teacher/reviews?reportId=${report.id}&filter=${statusFilter}`);
   };
 
   if (isLoading) {
@@ -445,19 +500,13 @@ export default function TeacherReportViewPage() {
           
           <div className="flex items-center gap-3 no-print">
             <button
-              onClick={handleExport}
-              className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition flex items-center gap-2 text-sm"
-            >
-              <FiDownload /> CSV
-            </button>
-            <button
               onClick={handlePrint}
               className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition flex items-center gap-2 text-sm"
             >
               <FiPrinter /> Хэвлэх
             </button>
             <button
-              onClick={() => router.push("/teacher/reviews")}
+              onClick={handleGoBack}
               className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-200 transition flex items-center gap-2 text-sm"
             >
               <FiArrowLeft /> Буцах
@@ -476,12 +525,13 @@ export default function TeacherReportViewPage() {
                 </h1>
                 <p className="text-blue-100 mt-1 text-sm">Тайлан ID: {report.id}</p>
               </div>
-              {getStatusBadge(report.status)}
+              {getStatusBadge(report.current_status)}
             </div>
           </div>
-          
+
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* 1. Оюутны мэдээлэл */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -500,40 +550,58 @@ export default function TeacherReportViewPage() {
                 )}
               </div>
               
+              {/* 2. Байгууллагын мэдээлэл (Төлөвийн оронд) */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                    <FiBriefcase className="text-indigo-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Байгууллага</h3>
+                </div>
+                {report.organization ? (
+                  <>
+                    <p className="text-gray-800 font-medium">
+                      {report.organization.org_name}
+                    </p>
+                    {report.organization.org_type && (
+                      <p className="text-gray-500 text-sm mt-1">
+                        Төрөл: {report.organization.org_type}
+                      </p>
+                    )}
+                    {report.organization.org_register && (
+                      <p className="text-gray-500 text-sm mt-1">
+                        РД: {report.organization.org_register}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-gray-500 text-sm">Мэдээлэл байхгүй</p>
+                )}
+              </div>
+              
+              {/* 3. Илгээсэн огноо */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                     <FiCalendar className="text-green-600" />
                   </div>
-                  <h3 className="font-semibold text-gray-900">Тайлангийн хугацаа</h3>
-                </div>
-                <p className="text-gray-800 font-medium">
-                  {getMonthName(report.tax_period_month)}, {report.tax_period_year} он
-                </p>
-                <p className="text-gray-500 text-sm mt-1">
-                  {report.tax_period_year} оны {report.tax_period_month}-р сар
-                </p>
-              </div>
-              
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                    <FiFileText className="text-purple-600" />
-                  </div>
                   <h3 className="font-semibold text-gray-900">Илгээсэн огноо</h3>
                 </div>
-                <p className="text-gray-800 font-medium">
-                  {report.submitted_at 
-                    ? new Date(report.submitted_at).toLocaleDateString()
-                    : new Date(report.created_at).toLocaleDateString()}
-                </p>
-                <p className="text-gray-500 text-sm mt-1">
-                  {report.submitted_at 
-                    ? new Date(report.submitted_at).toLocaleTimeString()
-                    : new Date(report.created_at).toLocaleTimeString()}
-                </p>
+                {report.submitted_at ? (
+                  <>
+                    <p className="text-gray-800 font-medium">
+                      {formatDateToMongolian(report.submitted_at).date}
+                    </p>
+                    <p className="text-gray-500 text-sm mt-1">
+                      {formatDateToMongolian(report.submitted_at).time}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-gray-500 text-sm">Илгээгүй байна</p>
+                )}
               </div>
               
+              {/* 4. Хянасан мэдээлэл */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
@@ -575,7 +643,7 @@ export default function TeacherReportViewPage() {
           ))}
         </div>
 
-        {/* Report Sections - Read Only */}
+        {/* Report Sections */}
         <div className="space-y-6">
           {reportStructure.sections.map((section, sectionIndex) => (
             <motion.div
