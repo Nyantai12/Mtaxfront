@@ -1,4 +1,3 @@
-// app/teacher/reviews/[id]/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback, JSX } from "react";
@@ -26,7 +25,8 @@ import { API_BASE_URL } from "@/api_base_url/page";
 import { 
   reportStructure, 
   ALL_FIELD_IDS, 
-  getCalculationRules,
+  parseBackendValue,
+  formatAsMoney as formatMoney,
   type Field 
 } from "@/maygt/page";
 
@@ -91,6 +91,31 @@ const getStatusBadge = (status: string) => {
   );
 };
 
+// Тооцооллын дүрмүүд
+const getCalculationRules = () => ({
+  "1": (getValue: (id: string) => number) => getValue("2") + getValue("3") + getValue("4") + getValue("5"),
+  "5": (getValue: (id: string) => number) => getValue("6") + getValue("7") + getValue("8") + getValue("9") + getValue("10") + 
+        getValue("11") + getValue("12") + getValue("13") + getValue("14") + getValue("15") + getValue("16"),
+  "17": (getValue: (id: string) => number) => getValue("18") + getValue("19") + getValue("20"),
+  "21": (getValue: (id: string) => number) => getValue("1") - getValue("17"),
+  "24": (getValue: (id: string) => number) => getValue("21") + getValue("22") - getValue("23"),
+  "26": (getValue: (id: string) => number) => getValue("24") + getValue("25"),
+  "28": (getValue: (id: string) => number) => getValue("26") - getValue("27"),
+  "29": (getValue: (id: string) => number) => getValue("28") * 0.25,
+  "31": (getValue: (id: string) => number) => getValue("29") - getValue("30"),
+  "32": (getValue: (id: string) => number) => getValue("33") + getValue("38") + getValue("39") + getValue("40") + getValue("41") + 
+          getValue("42") + getValue("44") + getValue("45") + getValue("47") + getValue("49"),
+  "36": (getValue: (id: string) => number) => getValue("33") - getValue("34") - getValue("35"),
+  "37": (getValue: (id: string) => number) => getValue("36") * 0.10,
+  "43": (getValue: (id: string) => number) => (getValue("38") + getValue("39") + getValue("40") + getValue("41") + getValue("42")) * 0.10,
+  "46": (getValue: (id: string) => number) => (getValue("44") + getValue("45")) * 0.05,
+  "48": (getValue: (id: string) => number) => getValue("47") * 0.02,
+  "50": (getValue: (id: string) => number) => getValue("49") * 0.40,
+  "51": (getValue: (id: string) => number) => getValue("37") + getValue("43") + getValue("46") + getValue("48") + getValue("50"),
+  "54": (getValue: (id: string) => number) => getValue("31") + getValue("51") - getValue("52") - getValue("53"),
+  "58": (getValue: (id: string) => number) => getValue("31") + getValue("51") - getValue("52") - getValue("53") - getValue("56") - getValue("57"),
+});
+
 // Тооцоолол хийх функц
 const calculateField = (fieldId: string, values: Record<string, string>): number => {
   const getValue = (id: string): number => {
@@ -101,13 +126,38 @@ const calculateField = (fieldId: string, values: Record<string, string>): number
   };
 
   const rules = getCalculationRules();
-  const rule = rules[fieldId as keyof typeof rules];
+  const rule = rules[fieldId as keyof ReturnType<typeof getCalculationRules>];
   
   if (rule) {
     return rule(getValue);
   }
   
   return getValue(fieldId);
+};
+
+// Backend бүтцээс утгуудыг гаргаж авах
+const extractValuesFromStructure = (sections: any[]): Record<string, string> => {
+  const extractedValues: Record<string, string> = {};
+  
+  const extractFromFields = (fields: any[]) => {
+    for (const field of fields) {
+      if (field.id && field.result !== undefined && field.result !== null) {
+        const numericValue = parseBackendValue(field.result);
+        extractedValues[field.id] = numericValue.toString();
+      }
+      if (field.children && field.children.length > 0) {
+        extractFromFields(field.children);
+      }
+    }
+  };
+  
+  for (const section of sections) {
+    if (section.fields) {
+      extractFromFields(section.fields);
+    }
+  }
+  
+  return extractedValues;
 };
 
 export default function TeacherReportViewPage() {
@@ -155,12 +205,22 @@ export default function TeacherReportViewPage() {
         const reportData = data.data;
         let reportValues: Record<string, string> = {};
 
+        // report_data -аас утгуудыг задлах
         if (reportData.report_data) {
-          if (typeof reportData.report_data === "object") {
+          if (typeof reportData.report_data === "object" && reportData.report_data.sections) {
+            // Хэрэв sections бүтэцтэй бол
+            reportValues = extractValuesFromStructure(reportData.report_data.sections);
+          } else if (typeof reportData.report_data === "object" && !reportData.report_data.sections) {
+            // Хэрэв шууд values объект бол
             reportValues = reportData.report_data;
           } else if (typeof reportData.report_data === "string") {
             try {
-              reportValues = JSON.parse(reportData.report_data);
+              const parsed = JSON.parse(reportData.report_data);
+              if (parsed.sections) {
+                reportValues = extractValuesFromStructure(parsed.sections);
+              } else {
+                reportValues = parsed;
+              }
             } catch (e) {
               console.error("JSON parse error:", e);
             }
@@ -200,8 +260,8 @@ export default function TeacherReportViewPage() {
         }
 
         setReport({
-          id: reportData.report_id,
-          report_name: reportData.type_name || "Татварын тайлан",
+          id: reportData.report_id || reportData.id || parseInt(reportId),
+          report_name: reportData.type_name || reportData.report_name || "Татварын тайлан",
           report_type_id: reportData.report_type_id || 1,
           tax_period_year: reportData.tax_period_year || new Date().getFullYear(),
           tax_period_month: reportData.tax_period_month || new Date().getMonth() + 1,
@@ -210,7 +270,7 @@ export default function TeacherReportViewPage() {
           submitted_at: reportData.submitted_at,
           status: reportData.status || "pending",
           values: reportValues,
-          feedback: reportData.feedback,
+          feedback: reportData.feedback || reportData.teacher_comment,
           reviewed_at: reportData.reviewed_at,
           teacher_id: reportData.teacher_id,
           teacher_name: reportData.teacher_name,
@@ -353,7 +413,7 @@ export default function TeacherReportViewPage() {
             <h2 className="text-xl font-semibold text-red-700 mb-2">Алдаа гарлаа</h2>
             <p className="text-red-600">{error || "Тайлангийн мэдээлэл олдсонгүй"}</p>
             <button
-              onClick={() => router.push("/teacher/review")}
+              onClick={() => router.push("/teacher/reviews")}
               className="mt-6 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
             >
               Буцах

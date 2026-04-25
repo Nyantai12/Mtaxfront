@@ -1,11 +1,11 @@
-// data/reportStructure.ts
+// maygt/page.tsx
 
 export interface Field {
   id: string;
   type: string;
   label: string;
   order: number;
-  result: string;
+  result?: string | number;
   isCalculated?: boolean;
   calculationRule?: string;
   children?: Field[];
@@ -15,13 +15,57 @@ export interface Section {
   id: string;
   title: string;
   fields: Field[];
-  columns?: any[];
 }
 
 export interface ReportData {
   sections: Section[];
 }
 
+// Backend-ээс ирсэн result утгыг цэвэр тоо болгох
+export const parseBackendValue = (result: any): number => {
+  if (result === undefined || result === null) return 0;
+  if (typeof result === 'number') return isFinite(result) ? result : 0;
+  if (typeof result === 'string') {
+    if (result.trim() === '') return 0;
+    const cleanValue = result.replace(/[₮,]/g, '').trim();
+    if (cleanValue === '') return 0;
+    const parsed = parseFloat(cleanValue);
+    return !isNaN(parsed) && isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+// Форматлах функц
+export const formatAsMoney = (value: string | number): string => {
+  if (value === "" || value === undefined || value === null) return "0.00 ₮";
+  let num: number;
+  if (typeof value === 'string') {
+    const cleanValue = value.replace(/[₮,]/g, '').trim();
+    num = parseFloat(cleanValue);
+  } else {
+    num = value;
+  }
+  if (isNaN(num) || !isFinite(num)) return "0.00 ₮";
+  const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${formatted} ₮`;
+};
+
+export const parseInputValue = (value: string): string => {
+  if (!value) return "";
+  let cleanValue = value.replace(/[₮,]/g, "").trim();
+  cleanValue = cleanValue.replace(/[^0-9.-]/g, "");
+  const dotCount = (cleanValue.match(/\./g) || []).length;
+  if (dotCount > 1) {
+    const firstDotIndex = cleanValue.indexOf(".");
+    cleanValue = cleanValue.substring(0, firstDotIndex + 1) + 
+                 cleanValue.substring(firstDotIndex + 1).replace(/\./g, "");
+  }
+  const num = parseFloat(cleanValue);
+  if (isNaN(num)) return "";
+  return num.toString();
+};
+
+// Default report structure
 export const reportStructure: ReportData = {
   sections: [
     {
@@ -37,30 +81,9 @@ export const reportStructure: ReportData = {
           isCalculated: true,
           calculationRule: "2+3+4+5",
           children: [
-            {
-              id: "2",
-              type: "number",
-              label: "1.1. Татвараас чөлөөлөгдөх орлогын дүн",
-              order: 2,
-              result: "0.00",
-              isCalculated: false,
-            },
-            {
-              id: "3",
-              type: "number",
-              label: "1.2. Тусгай хувь хэмжээгээр татвар ногдох орлого (32)",
-              order: 3,
-              result: "0.00",
-              isCalculated: false,
-            },
-            {
-              id: "4",
-              type: "number",
-              label: "1.3. Бусад орлогын дүн",
-              order: 4,
-              result: "0.00",
-              isCalculated: false,
-            },
+            { id: "2", type: "number", label: "1.1. Татвараас чөлөөлөгдөх орлогын дүн", order: 2, result: "0.00", isCalculated: false },
+            { id: "3", type: "number", label: "1.2. Тусгай хувь хэмжээгээр татвар ногдох орлого (32)", order: 3, result: "0.00", isCalculated: false },
+            { id: "4", type: "number", label: "1.3. Бусад орлогын дүн", order: 4, result: "0.00", isCalculated: false },
             {
               id: "5",
               type: "number",
@@ -205,61 +228,9 @@ export const reportStructure: ReportData = {
   ],
 };
 
-// Бүх талбарын ID-уудын жагсаалт
 export const ALL_FIELD_IDS = [
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
-  "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-  "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46",
-  "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58"
+  "1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16",
+  "17","18","19","20","21","22","23","24","25","26","27","28","29","30","31",
+  "32","33","34","35","36","37","38","39","40","41","42","43","44","45","46",
+  "47","48","49","50","51","52","53","54","55","56","57","58"
 ];
-
-// Форматлах функцууд
-export const formatAsMoney = (value: string | number): string => {
-  if (value === "" || value === undefined || value === null) return "0.00 ₮";
-  const num = typeof value === "string" ? parseFloat(value) : value;
-  if (isNaN(num)) return "0.00 ₮";
-  const formatted = num.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${formatted} ₮`;
-};
-
-export const parseInputValue = (value: string): string => {
-  if (!value) return "";
-  let cleanValue = value.replace(/,/g, "");
-  cleanValue = cleanValue.replace(/[^0-9.-]/g, "");
-  const dotCount = (cleanValue.match(/\./g) || []).length;
-  if (dotCount > 1) {
-    const firstDotIndex = cleanValue.indexOf(".");
-    cleanValue =
-      cleanValue.substring(0, firstDotIndex + 1) +
-      cleanValue.substring(firstDotIndex + 1).replace(/\./g, "");
-  }
-  const num = parseFloat(cleanValue);
-  if (isNaN(num)) return "";
-  return num.toString();
-};
-
-
-// Тооцооллын дүрмүүд
-export const getCalculationRules = () => ({
-  "1": (getValue: (id: string) => number) => getValue("2") + getValue("3") + getValue("4") + getValue("5"),
-  "5": (getValue: (id: string) => number) => getValue("6") + getValue("7") + getValue("8") + getValue("9") + getValue("10") + 
-        getValue("11") + getValue("12") + getValue("13") + getValue("14") + getValue("15") + getValue("16"),
-  "17": (getValue: (id: string) => number) => getValue("18") + getValue("19") + getValue("20"),
-  "21": (getValue: (id: string) => number) => getValue("1") - getValue("17"),
-  "24": (getValue: (id: string) => number) => getValue("21") + getValue("22") - getValue("23"),
-  "26": (getValue: (id: string) => number) => getValue("24") + getValue("25"),
-  "28": (getValue: (id: string) => number) => getValue("26") - getValue("27"),
-  "29": (getValue: (id: string) => number) => getValue("28") * 0.25,
-  "31": (getValue: (id: string) => number) => getValue("29") - getValue("30"),
-  "32": (getValue: (id: string) => number) => getValue("33") + getValue("38") + getValue("39") + getValue("40") + getValue("41") + 
-          getValue("42") + getValue("44") + getValue("45") + getValue("47") + getValue("49"),
-  "36": (getValue: (id: string) => number) => getValue("33") - getValue("34") - getValue("35"),
-  "37": (getValue: (id: string) => number) => getValue("36") * 0.10,
-  "43": (getValue: (id: string) => number) => (getValue("38") + getValue("39") + getValue("40") + getValue("41") + getValue("42")) * 0.10,
-  "46": (getValue: (id: string) => number) => (getValue("44") + getValue("45")) * 0.05,
-  "48": (getValue: (id: string) => number) => getValue("47") * 0.02,
-  "50": (getValue: (id: string) => number) => getValue("49") * 0.40,
-  "51": (getValue: (id: string) => number) => getValue("37") + getValue("43") + getValue("46") + getValue("48") + getValue("50"),
-  "54": (getValue: (id: string) => number) => getValue("31") + getValue("51") - getValue("52") - getValue("53"),
-  "58": (getValue: (id: string) => number) => getValue("31") + getValue("51") - getValue("52") - getValue("53") - getValue("56") - getValue("57"),
-});
