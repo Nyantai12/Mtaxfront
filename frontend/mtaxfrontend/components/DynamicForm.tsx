@@ -1,6 +1,6 @@
 // components/DynamicForm.tsx
 import React from "react";
-import { useDynamicForm } from "@/app/hooks/useDynamicForm";
+import { useDynamicForm } from "@/hooks/useDynamicForm";
 import { DynamicFormField } from "./DynamicFormField";
 
 type Section = NonNullable<ReturnType<typeof useDynamicForm>['schema']>['sections'][number];
