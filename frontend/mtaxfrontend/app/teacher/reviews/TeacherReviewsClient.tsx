@@ -1,3 +1,4 @@
+// app/teacher/reviews/TeacherReviewsClient.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -214,6 +215,7 @@ export default function TeacherReviewsClient() {
       });
 
       const data = await response.json();
+      console.log("Teacher reports data:", data);
 
       if (data.resultCode === 7640 && data.data) {
         const reportList = data.data;
@@ -254,7 +256,7 @@ export default function TeacherReviewsClient() {
             feedback: item.feedback,
             comments: item.comments || [],
             org_id: item.org_id,
-            org_name: item.org_name,
+            org_name: item.org_name || "",
             tax_period_year: item.tax_period_year,
             tax_period_month: item.tax_period_month,
             total_income: item.total_income,
@@ -649,6 +651,7 @@ export default function TeacherReviewsClient() {
           </div>
         )}
 
+        {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
@@ -699,6 +702,7 @@ export default function TeacherReviewsClient() {
           </div>
         </div>
 
+        {/* Filters */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-8">
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex-1 min-w-[300px]">
@@ -821,7 +825,9 @@ export default function TeacherReviewsClient() {
           </div>
         </div>
 
+        {/* Reports List and Detail */}
         <div className="grid lg:grid-cols-3 gap-6">
+          {/* Reports List */}
           <div className="lg:col-span-1">
             <div className="space-y-4">
               {currentReports.length === 0 ? (
@@ -858,6 +864,7 @@ export default function TeacherReviewsClient() {
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                             <FiMail className="text-xs" /> {report.student_email}
                           </p>
+                          {/* Байгууллагын нэр - ЭНД ХАРУУЛЖ БАЙНА */}
                           {report.org_name && (
                             <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                               <FiHome className="text-xs" /> {report.org_name}
@@ -877,6 +884,7 @@ export default function TeacherReviewsClient() {
                     </motion.div>
                   ))}
 
+                  {/* Pagination */}
                   {totalPages > 1 && (
                     <div className="flex justify-center items-center gap-2 mt-6 pt-4 border-t border-gray-200">
                       <button
@@ -944,6 +952,7 @@ export default function TeacherReviewsClient() {
             </div>
           </div>
 
+          {/* Report Detail */}
           <div className="lg:col-span-2">
             {selectedReport ? (
               <motion.div
@@ -967,6 +976,7 @@ export default function TeacherReviewsClient() {
                       <span className="flex items-center gap-1">
                         <FiCalendar /> Илгээсэн: {formatDate(selectedReport.submitted_at)}
                       </span>
+                      {/* Байгууллагын нэр - ЭНД ХАРУУЛЖ БАЙНА */}
                       {selectedReport.org_name && (
                         <span className="flex items-center gap-1">
                           <FiHome /> Байгууллага: {selectedReport.org_name}

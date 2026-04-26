@@ -1,4 +1,4 @@
-// student/report/[id]/page.tsx
+// app/student/report/[id]/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -7,17 +7,16 @@ import { useParams } from "next/navigation";
 import {
   FiSave, FiSend, FiRefreshCw, FiAlertCircle, FiCheckCircle,
   FiHome, FiFileText, FiMessageSquare, FiSearch, FiX, FiMail, FiClock,
-  FiXCircle,
+  FiXCircle, FiUser, FiSend as FiSendIcon,
 } from "react-icons/fi";
 import { FaChalkboardTeacher, FaUserCheck } from "react-icons/fa";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Header from "@/app/component/Header";
 import { API_BASE_URL } from "@/api_base_url/page";
-import { 
-  reportStructure, parseInputValue, formatAsMoney, parseBackendValue,
-  type Field
-} from "@/maygt/page";
+import { useDynamicForm, formatAsMoney } from "@/hooks/useDynamicForm";
+import { DynamicForm } from "@/components/DynamicForm";
+import { reportTypeService, ReportType } from "@/services/reportTypeService";
 
 interface Teacher {
   id: number;
@@ -25,7 +24,6 @@ interface Teacher {
   first_name: string;
   last_name: string;
   role: string;
-  department?: string;
 }
 
 interface Organization {
@@ -33,38 +31,32 @@ interface Organization {
   name: string;
 }
 
-interface FormData {
-  student_id: string;
-  report_type_id: number;
-  report_type_name?: string;
-  report_status?: string;
-  tax_period_year: number;
-  tax_period_month: number;
-  values: Record<string, string>;
-  teacher_id?: number;
-  report_id?: number;
-  is_draft?: boolean;
-  report_name?: string;
+interface Comment {
+  id?: number;
+  user_id?: number;
+  email: string;
+  first_name: string;
+  last_name?: string;
+  comment_text: string;
+  created_at: string;
+  user_role?: string;
 }
 
 type ReportStatus = "Илгээгээгүй" | "Хүлээгдэж буй" | "Буцаасан" | "Баталгаажсан";
 
 const mapApiStatusToDisplayStatus = (apiStatus: string | undefined): ReportStatus => {
   if (!apiStatus) return "Илгээгээгүй";
-  
   if (apiStatus === "Буцаасан") return "Буцаасан";
   if (apiStatus === "Pending" || apiStatus === "Хүлээгдэж буй") return "Хүлээгдэж буй";
   if (apiStatus === "Approved" || apiStatus === "Баталгаажсан") return "Баталгаажсан";
-  
   const statusLower = apiStatus.toLowerCase();
   if (statusLower === "pending") return "Хүлээгдэж буй";
   if (statusLower === "approved") return "Баталгаажсан";
   if (statusLower === "rejected") return "Буцаасан";
-  
   return "Илгээгээгүй";
 };
 
-export default function TaxReportPage() {
+export default function DynamicReportPage() {
   const params = useParams();
   const reportId = params.id as string;
   const router = useRouter();
@@ -85,56 +77,212 @@ export default function TaxReportPage() {
   const [feedback, setFeedback] = useState<string | undefined>();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
-  const [isClearedAndLocked, setIsClearedAndLocked] = useState(false);
   const [organization, setOrganization] = useState<Organization | null>(null);
-  
+  const [reportType, setReportType] = useState<ReportType | null>(null);
+  const [reportName, setReportName] = useState<string>("");
+  const [isClearedAndLocked, setIsClearedAndLocked] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
-
-  const recalculateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const inputFocusRef = useRef<{ [key: string]: boolean }>({});
-  const tempInputValueRef = useRef<{ [key: string]: string }>({});
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSendingComment, setIsSendingComment] = useState(false);
+  const [userInfo, setUserInfo] = useState<{ id: number; first_name: string; last_name: string; email: string; role: string } | null>(null);
+  
+  // Use ref for comment input to avoid re-render issues
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const reportIdRef = useRef<number | undefined>(undefined);
-  const [teacherComment, setTeacherComment] = useState<string | undefined>();
-  const [originalValues, setOriginalValues] = useState<Record<string, string>>({});
-  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const [studentInfo, setStudentInfo] = useState({ id: "", name: "" });
-  const [formData, setFormData] = useState<FormData>({
-    student_id: "",
-    report_type_id: 1,
-    tax_period_year: new Date().getFullYear(),
-    tax_period_month: new Date().getMonth() + 1,
-    values: {},
-    teacher_id: undefined,
-    report_id: undefined,
-    is_draft: true,
-    report_name: "",
+  // Dynamic Form Hook
+  const formHook = useDynamicForm({
+    reportTypeId: reportType?.id,
+    autoLoad: true
   });
+  
+  const { 
+    values, setValues, isLoading: isFormLoading, error: formError,
+    resetValues, clearAndLock, unlock, isLocked, 
+    buildReportData, extractValuesFromReportData
+  } = formHook;
 
-  useEffect(() => {
-    const loadData = async () => {
-      if (reportId && !isNaN(parseInt(reportId))) {
-        const parsedId = parseInt(reportId);
-        reportIdRef.current = parsedId;
-        await fetchReportDataAndStatus(parsedId);
-      } else {
-        setIsLoadingReport(false);
-        setFetchError("Тайлангийн ID буруу байна");
-      }
-    };
-    loadData();
-  }, [reportId]);
-
+  // Get user info from localStorage
   useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
       const userData = JSON.parse(user);
-      setStudentInfo({
-        id: userData.id?.toString() || "",
-        name: `${userData.last_name || ""} ${userData.first_name || ""}`,
+      setUserInfo({
+        id: userData.id,
+        first_name: userData.first_name || "",
+        last_name: userData.last_name || "",
+        email: userData.email || "",
+        role: userData.role || "student",
       });
-      setFormData((prev) => ({ ...prev, student_id: userData.id?.toString() || "" }));
     }
+  }, []);
+
+  // Fetch comments for this report
+  const fetchComments = async (reportId: number) => {
+    setIsLoadingComments(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/comment/reportcommentlist/${reportId}/`, {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await response.json();
+      console.log("Comments data:", data);
+      
+      if (data.resultCode === 9050 && data.data) {
+        setComments(data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+    } finally {
+      setIsLoadingComments(false);
+    }
+  };
+
+  // Send new comment
+  const sendComment = async () => {
+    const commentText = commentInputRef.current?.value || "";
+    
+    if (!commentText.trim()) {
+      setSubmitError("Сэтгэгдэл бичнэ үү");
+      return;
+    }
+    
+    if (!reportIdRef.current) {
+      setSubmitError("Тайлангийн ID олдсонгүй");
+      return;
+    }
+    
+    setIsSendingComment(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/comment/addcomment/${reportIdRef.current}/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          comment_text: commentText,
+        }),
+      });
+      const data = await response.json();
+      console.log("Send comment response:", data);
+      
+      if (data.resultCode === 9020) {
+        // Clear textarea
+        if (commentInputRef.current) {
+          commentInputRef.current.value = "";
+        }
+        await fetchComments(reportIdRef.current);
+        setSubmitSuccess(true);
+        setTimeout(() => setSubmitSuccess(false), 3000);
+      } else {
+        setSubmitError(data.resultMessage || "Сэтгэгдэл илгээхэд алдаа гарлаа");
+      }
+    } catch (error) {
+      console.error("Error sending comment:", error);
+      setSubmitError("Сэтгэгдэл илгээхэд алдаа гарлаа");
+    } finally {
+      setIsSendingComment(false);
+    }
+  };
+
+  // Fetch report type and data
+  useEffect(() => {
+    const fetchReportInfo = async () => {
+      if (!reportId || isNaN(parseInt(reportId))) {
+        setSubmitError("Тайлангийн ID буруу байна");
+        setIsLoadingReport(false);
+        return;
+      }
+      
+      const parsedId = parseInt(reportId);
+      reportIdRef.current = parsedId;
+      
+      try {
+        const result = await reportTypeService.getReportWithSchema(parsedId);
+        console.log("getReportWithSchema result:", result);
+        
+        if (result) {
+          setReportType(result.reportType);
+          setReportName(result.reportType?.type_name || "Тайлан");
+          
+          if (result.report.org_id && result.report.org_name) {
+            setOrganization({ id: result.report.org_id, name: result.report.org_name });
+          }
+          
+          // Extract values from report_data
+          if (result.report.report_data) {
+            const extractedValues = extractValuesFromReportData(result.report.report_data);
+            if (Object.keys(extractedValues).length > 0) {
+              setValues(extractedValues);
+            }
+          }
+          
+          // Fetch submission info
+          await fetchSubmissionInfo(parsedId);
+          
+          // Fetch comments
+          await fetchComments(parsedId);
+        } else {
+          setSubmitError("Тайлангийн мэдээлэл олдсонгүй");
+        }
+      } catch (error) {
+        console.error("Error fetching report:", error);
+        setSubmitError("Тайлан ачаалахад алдаа гарлаа");
+      } finally {
+        setIsLoadingReport(false);
+      }
+    };
+    
+    fetchReportInfo();
+  }, [reportId]);
+
+  const fetchSubmissionInfo = async (reportId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/report/submissionlist/`, {
+        method: "GET", 
+        credentials: "include", 
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await response.json();
+      console.log("Submission list:", data);
+      
+      if (data.resultCode === 6130 && data.data) {
+        const submission = data.data.find((item: any) => item.report_id === reportId);
+        if (submission) {
+          const mappedStatus = mapApiStatusToDisplayStatus(submission.current_status);
+          setCurrentStatus(mappedStatus);
+          setTeacherName(submission.teacher_name);
+          setFeedback(submission.teacher_comment);
+          setSubmittedAt(submission.submission_date);
+          setTeacherId(submission.teacher_id);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching submission:", error);
+    }
+  };
+
+  const fetchTeachers = async () => {
+    setIsLoadingTeachers(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/teacher/`, {
+        method: "GET", 
+        credentials: "include", 
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await response.json();
+      if (data.resultCode === 7630 && data.data) {
+        setTeachers(data.data);
+      }
+    } catch (error) { 
+      console.error("Error fetching teachers:", error);
+    } finally { 
+      setIsLoadingTeachers(false); 
+    }
+  };
+
+  useEffect(() => {
     fetchTeachers();
   }, []);
 
@@ -143,7 +291,6 @@ export default function TaxReportPage() {
       const foundTeacher = teachers.find(t => t.id === teacherId);
       if (foundTeacher) {
         setSelectedTeacher(foundTeacher);
-        setFormData(prev => ({ ...prev, teacher_id: foundTeacher.id }));
       }
     }
   }, [teachers, teacherId, selectedTeacher]);
@@ -169,318 +316,6 @@ export default function TaxReportPage() {
     return currentStatus === "Илгээгээгүй" || isClearedAndLocked;
   }, [currentStatus, isClearedAndLocked]);
 
-  const getStatusMessage = () => {
-    if (isClearedAndLocked) {
-      return { 
-        message: "Маягт X тайлан болсон байна. Та багшаа сонгоод тайлангаа илгээнэ үү.", 
-        color: "bg-orange-50 border-orange-200 text-orange-700", 
-        icon: <FiAlertCircle className="text-orange-600" /> 
-      };
-    }
-    
-    switch (currentStatus) {
-      case "Хүлээгдэж буй":
-        return { message: "Энэ тайлан аль хэдийн илгээгдсэн байна. Багшийн хариуг хүлээж байна.", color: "bg-yellow-50 border-yellow-200 text-yellow-800", icon: <FiClock className="text-yellow-600" /> };
-      case "Баталгаажсан":
-        return { message: "Энэ тайлан баталгаажсан байна. Өөрчлөлт оруулах боломжгүй.", color: "bg-green-50 border-green-200 text-green-800", icon: <FiCheckCircle className="text-green-600" /> };
-      case "Буцаасан":
-        return { message: "Энэ тайлан багшаар буцаагдсан байна. Та засварлаж дахин илгээх боломжтой.", color: "bg-red-50 border-red-200 text-red-800", icon: <FiAlertCircle className="text-red-600" /> };
-      default:
-        return { message: "Энэ тайлан илгээгдээгүй байна. Та маягтаа бөглөж илгээнэ үү.", color: "bg-gray-50 border-gray-200 text-gray-800", icon: <FiFileText className="text-gray-600" /> };
-    }
-  };
-
-  const extractValuesFromBackendStructure = (sections: any[]): Record<string, string> => {
-    const values: Record<string, string> = {};
-    const extractFromFields = (fields: any[]) => {
-      for (const field of fields) {
-        if (field.id && field.result !== undefined && field.result !== null) {
-          values[field.id] = parseBackendValue(field.result).toString();
-        }
-        if (field.children?.length) extractFromFields(field.children);
-      }
-    };
-    for (const section of sections) {
-      if (section.fields) extractFromFields(section.fields);
-    }
-    return values;
-  };
-
-  const fetchReportDataAndStatus = async (reportId: number) => {
-    setIsLoadingReport(true);
-    setFetchError(null);
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/report/${reportId}/`, {
-        method: "GET",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-      
-      const data = await response.json();
-      
-      if (data.resultCode === 7520 && data.data) {
-        const reportData = data.data;
-        
-        // Байгууллагын нэрийг авах
-        if (reportData.org_name) {
-          setOrganization({ id: reportData.org_id, name: reportData.org_name });
-        }
-        
-        let backendValues: Record<string, string> = {};
-        
-        // report_data-аас утгуудыг задлах
-        if (reportData.report_data) {
-          if (typeof reportData.report_data === "object" && reportData.report_data.sections) {
-            backendValues = extractValuesFromBackendStructure(reportData.report_data.sections);
-          } else if (typeof reportData.report_data === "object" && !reportData.report_data.sections) {
-            for (const [key, value] of Object.entries(reportData.report_data)) {
-              if (typeof value === 'string' || typeof value === 'number') {
-                backendValues[key] = value.toString();
-              }
-            }
-          } else if (typeof reportData.report_data === "string") {
-            try {
-              const parsed = JSON.parse(reportData.report_data);
-              if (parsed.sections) {
-                backendValues = extractValuesFromBackendStructure(parsed.sections);
-              } else {
-                for (const [key, value] of Object.entries(parsed)) {
-                  if (typeof value === 'string' || typeof value === 'number') {
-                    backendValues[key] = value.toString();
-                  }
-                }
-              }
-            } catch (e) {
-              console.error("JSON parse error:", e);
-            }
-          }
-        }
-        
-        if (Object.keys(backendValues).length > 0) {
-          setFormData(prev => ({ ...prev, values: backendValues, report_id: reportId }));
-          setOriginalValues({ ...backendValues });
-        } else {
-          const emptyValues: Record<string, string> = {};
-          const collectAllFieldIds = (fields: Field[]) => {
-            for (const field of fields) {
-              if (!field.isCalculated) emptyValues[field.id] = "";
-              if (field.children?.length) collectAllFieldIds(field.children);
-            }
-          };
-          collectAllFieldIds(reportStructure.sections.flatMap(s => s.fields));
-          setFormData(prev => ({ ...prev, values: emptyValues, report_id: reportId }));
-          setOriginalValues({ ...emptyValues });
-        }
-        
-        // Submission мэдээлэл авах
-        try {
-          const subResponse = await fetch(`${API_BASE_URL}/api/report/submissionlist/`, {
-            method: "GET", 
-            credentials: "include", 
-            headers: { "Content-Type": "application/json" }
-          });
-          const subData = await subResponse.json();
-          
-          if (subData.resultCode === 6130 && subData.data) {
-            const submission = subData.data.find((item: any) => item.report_id === reportId);
-            if (submission && submission.current_status) {
-              const mappedStatus = mapApiStatusToDisplayStatus(submission.current_status);
-              setCurrentStatus(mappedStatus);
-              
-              if (submission.teacher_name) setTeacherName(submission.teacher_name);
-              if (submission.teacher_comment) { 
-                setTeacherComment(submission.teacher_comment); 
-                setFeedback(submission.teacher_comment); 
-              }
-              if (submission.submission_date) setSubmittedAt(submission.submission_date);
-              if (submission.teacher_id) setTeacherId(submission.teacher_id);
-            } else {
-              setCurrentStatus("Илгээгээгүй");
-            }
-          } else {
-            setCurrentStatus("Илгээгээгүй");
-          }
-        } catch (subError) {
-          console.error("Submission fetch error:", subError);
-          setCurrentStatus("Илгээгээгүй");
-        }
-      } else {
-        setFetchError("Тайлан олдсонгүй");
-      }
-    } catch (error) {
-      console.error("Fetch error:", error);
-      setFetchError("Тайлан ачаалахад алдаа гарлаа");
-    } finally {
-      setIsLoadingReport(false);
-    }
-  };
-
-  const fetchTeachers = async () => {
-    setIsLoadingTeachers(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/user/teacher/`, {
-        method: "GET", credentials: "include", headers: { "Content-Type": "application/json" }
-      });
-      const data = await response.json();
-      if (data.resultCode === 7630 && data.data) setTeachers(data.data);
-    } catch (error) { 
-      console.error("Error fetching teachers:", error);
-    } finally { 
-      setIsLoadingTeachers(false); 
-    }
-  };
-
-  const getValue = useCallback((fieldId: string): number => {
-    const value = formData.values[fieldId];
-    if (!value) return 0;
-    const num = Number(value);
-    return isNaN(num) ? 0 : num;
-  }, [formData.values]);
-
-  const getDisplayValue = useCallback((fieldId: string): string => {
-    if (inputFocusRef.current[fieldId] && tempInputValueRef.current[fieldId] !== undefined) {
-      return tempInputValueRef.current[fieldId];
-    }
-    const value = formData.values[fieldId];
-    if (!value) return "0.00 ₮";
-    const num = parseFloat(value);
-    return isNaN(num) ? "0.00 ₮" : formatAsMoney(num);
-  }, [formData.values]);
-
-  const evaluateRule = useCallback((rule?: string): number => {
-    if (!rule) return 0;
-    let expression = rule.replace(/(\d+(?:\.\d+)?)%/g, (_, p1) => `(${parseFloat(p1) / 100})`);
-    expression = expression.replace(/\b(\d+)\b/g, (match) => getValue(match).toString());
-    try {
-      const result = Function('"use strict"; return (' + expression + ')')();
-      return isNaN(result) ? 0 : result;
-    } catch { 
-      return 0; 
-    }
-  }, [getValue]);
-
-  const recalculateAll = useCallback(() => {
-    setFormData((prev) => {
-      const newValues = { ...prev.values };
-      const calculatedFields: Field[] = [];
-      const collect = (fields: Field[]) => {
-        for (const field of fields) {
-          if (field.isCalculated && field.calculationRule) calculatedFields.push(field);
-          if (field.children?.length) collect(field.children);
-        }
-      };
-      collect(reportStructure.sections.flatMap(s => s.fields));
-      
-      for (let i = 0; i < 10; i++) {
-        let changed = false;
-        for (const field of calculatedFields) {
-          if (field.calculationRule) {
-            const result = evaluateRule(field.calculationRule);
-            const current = parseFloat(newValues[field.id] || "0");
-            if (Math.abs(current - result) > 0.001) {
-              newValues[field.id] = result.toString();
-              changed = true;
-            }
-          }
-        }
-        if (!changed) break;
-      }
-      return { ...prev, values: newValues };
-    });
-  }, [evaluateRule]);
-
-  const handleFocus = useCallback((fieldId: string) => {
-    if (isReportLocked()) return;
-    inputFocusRef.current[fieldId] = true;
-    tempInputValueRef.current[fieldId] = "";
-    setFormData(prev => ({ ...prev }));
-  }, [isReportLocked]);
-
-  const handleBlur = useCallback((fieldId: string) => {
-    if (isReportLocked()) return;
-    inputFocusRef.current[fieldId] = false;
-    delete tempInputValueRef.current[fieldId];
-    setTimeout(() => recalculateAll(), 50);
-  }, [isReportLocked, recalculateAll]);
-
-  const handleInputChange = useCallback((fieldId: string, displayValue: string) => {
-    if (isReportLocked()) return;
-    tempInputValueRef.current[fieldId] = displayValue;
-    const cleanValue = parseInputValue(displayValue);
-    setFormData(prev => ({ ...prev, values: { ...prev.values, [fieldId]: cleanValue } }));
-    if (recalculateTimeoutRef.current) clearTimeout(recalculateTimeoutRef.current);
-    recalculateTimeoutRef.current = setTimeout(() => recalculateAll(), 100);
-  }, [recalculateAll, isReportLocked]);
-
-  const resetAllValues = () => {
-    if (isReportLocked()) {
-      setSubmitError("Тайлан илгээгдсэн эсвэл баталгаажсан тул утгуудыг өөрчлөх боломжгүй.");
-      return;
-    }
-    if (Object.keys(originalValues).length > 0) {
-      setFormData(prev => ({ ...prev, values: { ...originalValues } }));
-    } else {
-      const newValues: Record<string, string> = {};
-      const resetFields = (fields: Field[]) => {
-        for (const field of fields) {
-          if (!field.isCalculated) newValues[field.id] = "";
-          if (field.children?.length) resetFields(field.children);
-        }
-      };
-      resetFields(reportStructure.sections.flatMap(s => s.fields));
-      setFormData(prev => ({ ...prev, values: newValues }));
-    }
-    setTimeout(() => recalculateAll(), 0);
-  };
-
-  const updateReportStructureWithValues = (structure: any, values: Record<string, string>) => {
-    const updateFields = (fields: any[]): any[] => {
-      return fields.map(field => {
-        const updated = { ...field };
-        if (field.id && values[field.id] !== undefined) {
-          const num = parseFloat(values[field.id]);
-          updated.result = formatAsMoney(isNaN(num) ? 0 : num);
-        }
-        if (field.children?.length) updated.children = updateFields(field.children);
-        return updated;
-      });
-    };
-    return {
-      ...structure,
-      sections: structure.sections.map((section: any) => ({ ...section, fields: updateFields(section.fields) }))
-    };
-  };
-
-  const handleClearAndLock = () => {
-    const clearedValues: Record<string, string> = {};
-    const collectAllFieldIds = (fields: Field[]) => {
-      for (const field of fields) {
-        clearedValues[field.id] = "0";
-        if (field.children?.length) collectAllFieldIds(field.children);
-      }
-    };
-    collectAllFieldIds(reportStructure.sections.flatMap(s => s.fields));
-    
-    setFormData(prev => ({ ...prev, values: clearedValues }));
-    setOriginalValues({ ...clearedValues });
-    setIsClearedAndLocked(true);
-  };
-
-  const handleUnlock = () => {
-    setIsClearedAndLocked(false);
-    setSubmitError("");
-  };
-
-  const handleSubmitClick = () => {
-    if (!selectedTeacher && !teacherId) {
-      setSubmitError("Тайлан илгээх багшаа сонгоно уу");
-      setShowTeacherModal(true);
-      return;
-    }
-    setShowSubmitConfirm(true);
-  };
-
   const saveReport = async (isDraft: boolean = false) => {
     if (isDraft && isReportLocked()) {
       setSubmitError("Маягт түгжсэн тул ноорог хадгалах боломжгүй.");
@@ -498,10 +333,14 @@ export default function TaxReportPage() {
     setSubmitError("");
 
     try {
-      const updatedStructure = updateReportStructureWithValues(reportStructure, formData.values);
+      const reportData = buildReportData();
+      console.log("Saving report data:", reportData);
+      
       const saveResponse = await fetch(`${API_BASE_URL}/api/report/savereportfields/${currentReportId}/`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ report_data: updatedStructure })
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        credentials: "include",
+        body: JSON.stringify({ report_data: reportData })
       });
       const saveData = await saveResponse.json();
 
@@ -525,7 +364,9 @@ export default function TaxReportPage() {
       const targetTeacherId = selectedTeacher?.id || teacherId;
 
       const submissionResponse = await fetch(`${API_BASE_URL}/api/report/addsubmission/`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        credentials: "include",
         body: JSON.stringify({ report_id: currentReportId, teacher_id: targetTeacherId })
       });
       const submissionData = await submissionResponse.json();
@@ -546,54 +387,214 @@ export default function TaxReportPage() {
     }
   };
 
+  const handleClearAndLock = () => {
+    clearAndLock();
+    setIsClearedAndLocked(true);
+  };
+
+  const handleUnlock = () => {
+    unlock();
+    setIsClearedAndLocked(false);
+    setSubmitError("");
+  };
+
+  const handleSubmitClick = () => {
+    if (!selectedTeacher && !teacherId) {
+      setSubmitError("Тайлан илгээх багшаа сонгоно уу");
+      setShowTeacherModal(true);
+      return;
+    }
+    setShowSubmitConfirm(true);
+  };
+
   const confirmSubmit = async () => {
     setShowSubmitConfirm(false);
     await saveReport(false);
   };
 
-  const renderFields = (fields: Field[], level: number = 0) => {
-    const locked = isReportLocked();
-    return fields.sort((a, b) => a.order - b.order).map((field) => (
-      <div key={field.id}>
-        <div className={`grid grid-cols-12 gap-4 p-3 ${field.isCalculated ? "bg-blue-50" : ""} border-b border-gray-200`}>
-          <div className="col-span-1 font-medium text-gray-800 text-center">{field.id}</div>
-          <div className="col-span-8">
-            <div className="text-sm text-gray-800" style={{ paddingLeft: `${level * 20}px` }}>
-              {field.label}
-              {field.isCalculated && field.calculationRule && (
-                <span className="ml-2 text-xs text-blue-700">(Томьёо: {field.calculationRule})</span>
-              )}
-            </div>
-          </div>
-          <div className="col-span-3">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={getDisplayValue(field.id)}
-              onChange={(e) => handleInputChange(field.id, e.target.value)}
-              onFocus={() => handleFocus(field.id)}
-              onBlur={() => handleBlur(field.id)}
-              readOnly={field.isCalculated || locked}
-              placeholder="0.00 ₮"
-              className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-right text-gray-800 font-normal ${
-                field.isCalculated ? "bg-blue-100/50 font-medium cursor-not-allowed" :
-                locked ? "bg-gray-100 cursor-not-allowed text-gray-600" :
-                "bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              }`}
-            />
-          </div>
-        </div>
-        {field.children && renderFields(field.children, level + 1)}
-      </div>
-    ));
+  const getStatusMessage = () => {
+    if (isClearedAndLocked) {
+      return { 
+        message: "Маягт X тайлан болсон байна. Та багшаа сонгоод тайлангаа илгээнэ үү.", 
+        color: "bg-orange-50 border-orange-200 text-orange-700", 
+        icon: <FiAlertCircle className="text-orange-600" /> 
+      };
+    }
+    
+    switch (currentStatus) {
+      case "Хүлээгдэж буй":
+        return { message: "Энэ тайлан аль хэдийн илгээгдсэн байна. Багшийн хариуг хүлээж байна.", color: "bg-yellow-50 border-yellow-200 text-yellow-800", icon: <FiClock className="text-yellow-600" /> };
+      case "Баталгаажсан":
+        return { message: "Энэ тайлан баталгаажсан байна. Өөрчлөлт оруулах боломжгүй.", color: "bg-green-50 border-green-200 text-green-800", icon: <FiCheckCircle className="text-green-600" /> };
+      case "Буцаасан":
+        return { message: "Энэ тайлан багшаар буцаагдсан байна. Та засварлаж дахин илгээх боломжтой.", color: "bg-red-50 border-red-200 text-red-800", icon: <FiAlertCircle className="text-red-600" /> };
+      default:
+        return { message: "Энэ тайлан илгээгдээгүй байна. Та маягтаа бөглөж илгээнэ үү.", color: "bg-gray-50 border-gray-200 text-gray-800", icon: <FiFileText className="text-gray-600" /> };
+    }
   };
 
-  const summaryValues = [
-    { id: "31", label: "Нийтлэг хувь хэмжээгээр ногдуулсан татвар", value: getValue("31") },
-    { id: "51", label: "Тусгай хувь хэмжээгээр ногдуулсан татвар", value: getValue("51") },
-    { id: "54", label: "Төлбөл зохих татварын дүн", value: getValue("54") },
-    { id: "58", label: "Нийт төлбөл зохих татварын дүн", value: getValue("58") },
-  ];
+  // Comment section component
+  const CommentsSection = () => {
+    const currentUserId = userInfo?.id;
+    
+    // Teacher feedback from submission
+    const teacherFeedback = feedback ? {
+      comment_text: feedback,
+      created_at: submittedAt,
+      first_name: teacherName?.split(" ")[1] || "",
+      last_name: teacherName?.split(" ")[0] || "",
+      email: teacherName || "",
+      user_role: "teacher",
+      user_id: teacherId,
+    } : null;
+    
+    // Regular comments from API
+    const regularComments = comments.filter(c => c.comment_text !== feedback);
+    
+    return (
+      <div className="mt-8 bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+        <div className="bg-gradient-to-r from-gray-700 to-gray-800 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <FiMessageSquare className="text-white text-xl" />
+            <h2 className="text-lg font-bold text-white">Санал хүсэлт, сэтгэгдэл</h2>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          {/* Write new comment section */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                <FiUser className="text-white text-lg" />
+              </div>
+              <div className="flex-1">
+                <div className="mb-2">
+                  <span className="font-semibold text-gray-800">
+                    {userInfo?.last_name} {userInfo?.first_name} (Та)
+                  </span>
+                </div>
+                <textarea
+                  ref={commentInputRef}
+                  rows={3}
+                  placeholder="Санал хүсэлт, сэтгэгдлээ бичнэ үү..."
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none text-black bg-white"
+                />
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={sendComment}
+                    disabled={isSendingComment}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSendingComment ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <FiSendIcon />
+                    )}
+                    Илгээх
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Teacher's feedback (from status change) */}
+          {teacherFeedback && teacherFeedback.comment_text && (
+            <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
+                  <FaChalkboardTeacher className="text-white text-lg" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                    <span className="font-semibold text-gray-800">
+                      {teacherName || "Багш"} 
+                      <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Хянасан багш</span>
+                    </span>
+                    {teacherFeedback.created_at && (
+                      <span className="text-xs text-gray-500">
+                        {new Date(teacherFeedback.created_at).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-white rounded-lg p-3 mt-2">
+                    <p className="text-gray-700 whitespace-pre-wrap">{teacherFeedback.comment_text}</p>
+                  </div>
+                  <div className="mt-2">
+                    <span className={`text-xs font-medium ${
+                      currentStatus === "Баталгаажсан" ? "text-green-600" : 
+                      currentStatus === "Буцаасан" ? "text-red-600" : "text-orange-600"
+                    }`}>
+                      {currentStatus === "Баталгаажсан" ? "✅ Баталгаажуулсан" : 
+                       currentStatus === "Буцаасан" ? "❌ Буцаасан" : "📝 Сэтгэгдэл"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Regular comments from all users */}
+          {regularComments.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+                <FiMessageSquare className="text-sm" />
+                Бусад сэтгэгдлүүд ({regularComments.length})
+              </h3>
+              {regularComments.map((comment, index) => {
+                const isCurrentUser = comment.user_id === currentUserId;
+                
+                return (
+                  <div key={index} className={`rounded-xl p-4 border ${
+                    isCurrentUser 
+                      ? "bg-green-50 border-green-200" 
+                      : "bg-blue-50 border-blue-200"
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        isCurrentUser ? "bg-green-500" : "bg-blue-500"
+                      }`}>
+                        <FiUser className="text-white text-lg" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                          <span className="font-semibold text-gray-800">
+                            {comment.last_name ? `${comment.last_name} ${comment.first_name}` : comment.first_name}
+                            {comment.user_role === "teacher" && !isCurrentUser && (
+                              <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Багш</span>
+                            )}
+                            {isCurrentUser && (
+                              <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Та</span>
+                            )}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(comment.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="bg-white rounded-lg p-3 mt-2">
+                          <p className="text-gray-700 whitespace-pre-wrap">{comment.comment_text}</p>
+                        </div>
+                        <div className="mt-2">
+                          <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <FiMail className="text-xs" /> {comment.email}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {regularComments.length === 0 && !teacherFeedback && (
+            <div className="text-center text-gray-400 text-sm py-4">
+              <FiMessageSquare className="inline mr-1" />
+              Одоогоор сэтгэгдэл байхгүй байна. Та хамгийн түрүүнд сэтгэгдэл үлдээгээрэй!
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderTeacherInfo = () => {
     if (currentStatus === "Хүлээгдэж буй" && teacherName) {
@@ -660,16 +661,6 @@ export default function TaxReportPage() {
                 Баталгаажсан
               </div>
             </div>
-            
-            {feedback && (
-              <div className="mt-4 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiMessageSquare className="text-blue-700" />
-                  <h4 className="font-semibold text-gray-800">Багшийн сэтгэгдэл</h4>
-                </div>
-                <p className="text-gray-700 whitespace-pre-wrap">{feedback}</p>
-              </div>
-            )}
           </div>
         </div>
       );
@@ -706,20 +697,6 @@ export default function TaxReportPage() {
                 Буцаасан
               </div>
             </div>
-            
-            {(feedback || teacherComment) && (
-              <div className="mt-4 p-4 bg-orange-50 rounded-xl border border-orange-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <FiAlertCircle className="text-orange-700" />
-                  <h4 className="font-semibold text-gray-800">Буцаасан шалтгаан</h4>
-                </div>
-                <p className="text-gray-700 whitespace-pre-wrap">{feedback || teacherComment}</p>
-                <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-                  <FiMessageSquare className="text-xs" />
-                  Дахин илгээхдээ дээрх шалтгааныг харгалзан үзнэ үү !!!
-                </p>
-              </div>
-            )}
           </div>
         </div>
       );
@@ -735,7 +712,6 @@ export default function TaxReportPage() {
       <div className="mb-6 bg-white rounded-2xl shadow-xl border p-6">
         <h3 className="font-semibold text-lg text-gray-800 mb-4">
           Тайлан илгээх багш
-          {isClearedAndLocked && <span className="ml-2 text-sm text-orange-600"></span>}
         </h3>
         {selectedTeacher ? (
           <div className="flex items-center justify-between p-4 bg-green-50 rounded-xl border border-green-200">
@@ -760,9 +736,7 @@ export default function TaxReportPage() {
             className="w-full p-4 border-2 border-dashed border-gray-300 rounded-xl text-center hover:border-blue-400 hover:bg-blue-50 transition group"
           >
             <FaChalkboardTeacher className="text-4xl text-gray-400 mx-auto mb-2 group-hover:text-blue-500" />
-            <p className="text-gray-600 group-hover:text-blue-600">
-              {isClearedAndLocked ? "Багш сонгоод тайлан илгээх" : "Багш сонгох"}
-            </p>
+            <p className="text-gray-600 group-hover:text-blue-600">Багш сонгох</p>
             <p className="text-xs text-gray-500 mt-1">Сонгох товч дарж багшаа сонгоно уу</p>
           </button>
         )}
@@ -812,7 +786,7 @@ export default function TaxReportPage() {
                   </div>
                 ) : (
                   filteredTeachers.map((teacher) => (
-                    <div key={teacher.id} onClick={() => { setSelectedTeacher(teacher); setFormData(prev => ({ ...prev, teacher_id: teacher.id })); setShowTeacherModal(false); }}
+                    <div key={teacher.id} onClick={() => { setSelectedTeacher(teacher); setShowTeacherModal(false); }}
                       className={`p-4 rounded-xl cursor-pointer transition ${selectedTeacher?.id === teacher.id ? "bg-blue-50 border-2 border-blue-500" : "bg-gray-50 hover:bg-gray-100"}`}>
                       <div className="flex items-center gap-4">
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedTeacher?.id === teacher.id ? "bg-blue-500" : "bg-gray-400"}`}>
@@ -889,7 +863,8 @@ export default function TaxReportPage() {
     </AnimatePresence>
   );
 
-  if (isLoadingReport) {
+  // Loading state
+  if (isLoadingReport || isFormLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
@@ -900,7 +875,7 @@ export default function TaxReportPage() {
     );
   }
 
-  if (fetchError) {
+  if (formError) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
@@ -908,7 +883,7 @@ export default function TaxReportPage() {
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
             <FiAlertCircle className="text-red-600 text-5xl mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-red-800 mb-2">Алдаа гарлаа</h2>
-            <p className="text-red-600 mb-4">{fetchError}</p>
+            <p className="text-red-600 mb-4">{formError}</p>
             <button onClick={() => window.location.reload()} className="px-4 py-2 bg-red-600 text-white rounded-lg">Дахин ачаалах</button>
           </div>
         </div>
@@ -940,7 +915,7 @@ export default function TaxReportPage() {
           </Link>
           <span>/</span>
           <span className="text-gray-800 font-medium">
-            {organization ? organization.name : "Татварын тайлан"}
+            {organization ? organization.name : reportName}
           </span>
         </div>
 
@@ -969,7 +944,7 @@ export default function TaxReportPage() {
 
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Татварын тайлангийн маягт</h1>
+            <h1 className="text-3xl font-bold text-gray-800">{reportName}</h1>
             <p className="text-gray-600 mt-1">
               Тайлангийн төлөв: 
               <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${
@@ -993,7 +968,8 @@ export default function TaxReportPage() {
 
         {submitSuccess && (
           <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl text-green-800">
-            <FiCheckCircle className="inline mr-2" /> Тайлан амжилттай хадгалагдлаа.
+            <FiCheckCircle className="inline mr-2" /> 
+            Амжилттай хадгалагдлаа
           </div>
         )}
         {submitError && (
@@ -1002,21 +978,11 @@ export default function TaxReportPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          {summaryValues.map((item) => (
-            <div key={item.id} className="bg-white rounded-xl shadow-lg border p-5">
-              <div className="text-sm text-gray-600 mb-2">Мөр {item.id}</div>
-              <div className="text-2xl font-bold text-gray-800">{formatAsMoney(item.value)}</div>
-              <div className="text-xs text-gray-500 mt-1">{item.label}</div>
-            </div>
-          ))}
-        </div>
-
         <div className="flex gap-3 mb-6 items-center">
-          <button onClick={resetAllValues} disabled={locked} className={`px-4 py-2 rounded-xl flex items-center gap-2 transition ${
+          <button onClick={resetValues} disabled={locked} className={`px-4 py-2 rounded-xl flex items-center gap-2 transition ${
             locked ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white border border-gray-300 hover:bg-gray-50 text-gray-700"
           }`}>
-            <FiRefreshCw /> Бүгдийг 0 болгох (түр)
+            <FiRefreshCw /> Бүгдийг 0 болгох
           </button>
           
           {!locked && (
@@ -1025,29 +991,26 @@ export default function TaxReportPage() {
             </button>
           )}
           
-          <label className={`flex items-center gap-2 px-4 py-2 rounded-xl border cursor-pointer transition ${
-            isClearedAndLocked 
-              ? "bg-green-50 border-green-300 text-green-700" 
-              : "bg-white border-gray-300 hover:bg-gray-50 text-gray-700"
-          } ${locked && !isClearedAndLocked ? "opacity-50 cursor-not-allowed" : ""}`}>
-            <input
-              type="checkbox"
-              checked={isClearedAndLocked}
-              onChange={() => {
-                if (isClearedAndLocked) {
-                  handleUnlock();
-                } else {
-                  handleClearAndLock();
-                }
-              }}
-              disabled={locked && !isClearedAndLocked}
-              className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
-            />
+          <button
+            onClick={() => {
+              if (isClearedAndLocked) {
+                handleUnlock();
+              } else {
+                handleClearAndLock();
+              }
+            }}
+            disabled={locked && !isClearedAndLocked}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition ${
+              isClearedAndLocked 
+                ? "bg-green-50 border-green-300 text-green-700" 
+                : "bg-white border-gray-300 hover:bg-gray-50 text-gray-700"
+            } ${locked && !isClearedAndLocked ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
             <FiXCircle className={isClearedAndLocked ? "text-green-600" : "text-red-600"} />
             <span className="text-sm font-medium">
               {isClearedAndLocked ? "Тэглэгдэж түгжсэн" : "Тэглэх & Түгжих"}
             </span>
-          </label>
+          </button>
           
           {canSubmit() && (
             <button 
@@ -1066,23 +1029,11 @@ export default function TaxReportPage() {
           )}
         </div>
 
-        <div className="space-y-6">
-          {reportStructure.sections.map((section) => (
-            <div key={section.id} className="bg-white rounded-2xl shadow-xl border overflow-hidden">
-              <div className="bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] px-6 py-4">
-                <h2 className="text-lg font-bold text-white">{section.title}</h2>
-              </div>
-              <div className="p-4">
-                <div className="grid grid-cols-12 gap-4 px-3 py-2 bg-gray-100 rounded-t-lg font-medium text-sm text-gray-700">
-                  <div className="col-span-1">Мөр</div>
-                  <div className="col-span-8">Үзүүлэлтүүд</div>
-                  <div className="col-span-3">Дүн (₮)</div>
-                </div>
-                <div className="border-x border-b rounded-b-lg">{renderFields(section.fields)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {/* Dynamic Form */}
+        <DynamicForm formHook={formHook} isLocked={locked} />
+
+        {/* Comments Section */}
+        <CommentsSection />
 
         <div className="mt-8 text-center text-sm text-gray-500">
           <p>Тооцоолол автоматаар шинэчлэгдэнэ. Цэнхэр мөрүүд нь томьёотой мөрүүд.</p>
