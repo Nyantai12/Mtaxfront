@@ -24,6 +24,7 @@ import {
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import { API_BASE_URL } from "@/api_base_url/page";
+import { CgUserAdd } from "react-icons/cg";
 interface UserData {
   id: number;
   email: string;
@@ -415,6 +416,17 @@ const handleLogout = () => {
                 >
                   <FiUsers />
                   Хэрэглэгчид
+                </Link>
+                <Link
+                  href="/admin/studentregister"
+                  className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                    isActive("/admin/studentregister")
+                      ? "text-purple-600 bg-purple-50"
+                      : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
+                  }`}
+                >
+                  <CgUserAdd />
+                  Оюутан бүртгэх
                 </Link>
                 
               </>

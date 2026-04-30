@@ -1,7 +1,7 @@
 // app/teacher/reviews/TeacherReviewsClient.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   FiFileText,
@@ -154,6 +154,9 @@ export default function TeacherReviewsClient() {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(3);
+  
+  const hasRestoredSelection = useRef(false);
+  const selectedReportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -179,28 +182,45 @@ export default function TeacherReviewsClient() {
   }, [teacherInfo]);
 
   useEffect(() => {
-    const reportIdFromUrl = searchParams.get('reportId');
     const filterFromUrl = searchParams.get('filter');
-    
     if (filterFromUrl && ["all", "pending", "approved", "rejected"].includes(filterFromUrl)) {
       setFilterStatus(filterFromUrl);
     }
+  }, [searchParams]);
+
+  // Restore selected report and scroll to correct page
+  useEffect(() => {
+    const reportIdFromUrl = searchParams.get('reportId');
+    const filterFromUrl = searchParams.get('filter');
     
-    if (reportIdFromUrl && reports.length > 0) {
+    if (reports.length > 0 && reportIdFromUrl && !hasRestoredSelection.current) {
       const foundReport = reports.find(r => r.id === parseInt(reportIdFromUrl));
-      if (foundReport && (!selectedReport || selectedReport.id !== foundReport.id)) {
+      if (foundReport) {
+        console.log("Restoring selected report:", foundReport.id);
         setSelectedReport(foundReport);
         setCommentText(foundReport.feedback || "");
         fetchReportDetail(foundReport.id);
+        hasRestoredSelection.current = true;
+        
+        // Find and scroll to the page containing this report
+        setTimeout(() => {
+          const reportElement = document.getElementById(`report-${foundReport.id}`);
+          if (reportElement) {
+            reportElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            reportElement.classList.add('ring-2', 'ring-blue-500');
+            setTimeout(() => {
+              reportElement.classList.remove('ring-2', 'ring-blue-500');
+            }, 2000);
+          }
+        }, 500);
       }
-    } else if (!reportIdFromUrl) {
-      setSelectedReport(null);
     }
-  }, [reports, searchParams, selectedReport]);
+  }, [reports, searchParams]);
 
   useEffect(() => {
     setCurrentPage(1);
     setSelectedReport(null);
+    hasRestoredSelection.current = false;
   }, [filterStatus, searchQuery, startDate, endDate]);
 
   const fetchReports = async () => {
@@ -493,6 +513,8 @@ export default function TeacherReviewsClient() {
 
   const handleFilterChange = (newFilter: string) => {
     setFilterStatus(newFilter);
+    setSelectedReport(null);
+    hasRestoredSelection.current = false;
     const currentReportId = searchParams.get('reportId');
     if (currentReportId) {
       router.push(`/teacher/reviews?reportId=${currentReportId}&filter=${newFilter}`, { scroll: false });
@@ -561,6 +583,7 @@ export default function TeacherReviewsClient() {
   const hasActiveFilters = filterStatus !== "all" || searchQuery || hasDateFilter;
 
   const clearAllFilters = () => {
+    const currentReportId = searchParams.get('reportId');
     setFilterStatus("all");
     setSearchQuery("");
     setStartDate("");
@@ -569,7 +592,13 @@ export default function TeacherReviewsClient() {
     setTempStartDate("");
     setTempEndDate("");
     setShowDateFilter(false);
-    router.push('/teacher/reviews', { scroll: false });
+    setSelectedReport(null);
+    hasRestoredSelection.current = false;
+    if (currentReportId) {
+      router.push(`/teacher/reviews?reportId=${currentReportId}`, { scroll: false });
+    } else {
+      router.push('/teacher/reviews', { scroll: false });
+    }
   };
 
   const resetDateFilter = () => {
@@ -594,7 +623,9 @@ export default function TeacherReviewsClient() {
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
-      setSelectedReport(null);
+      if (selectedReport) {
+        router.push(`/teacher/reviews?reportId=${selectedReport.id}&filter=${filterStatus}`, { scroll: false });
+      }
     }
   };
 
@@ -829,6 +860,12 @@ export default function TeacherReviewsClient() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Reports List */}
           <div className="lg:col-span-1">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-gray-900">Тайлангууд ({filteredReports.length})</h3>
+              <span className="text-xs text-gray-500">
+                {filteredReports.length > 0 ? `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredReports.length)} / ${filteredReports.length}` : "0 / 0"}
+              </span>
+            </div>
             <div className="space-y-4">
               {currentReports.length === 0 ? (
                 <div className="bg-white rounded-2xl p-8 text-center">
@@ -848,11 +885,12 @@ export default function TeacherReviewsClient() {
                   {currentReports.map((report) => (
                     <motion.div
                       key={report.id}
+                      id={`report-${report.id}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => handleSelectReport(report)}
                       className={`bg-white rounded-2xl p-4 shadow-lg border-2 cursor-pointer transition ${
-                        selectedReport?.id === report.id ? "border-blue-500" : "border-gray-100 hover:border-blue-300"
+                        selectedReport?.id === report.id ? "border-blue-500 bg-blue-50/30" : "border-gray-100 hover:border-blue-300"
                       }`}
                     >
                       <div className="flex justify-between items-start mb-3">
@@ -864,7 +902,6 @@ export default function TeacherReviewsClient() {
                           <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                             <FiMail className="text-xs" /> {report.student_email}
                           </p>
-                          {/* Байгууллагын нэр - ЭНД ХАРУУЛЖ БАЙНА */}
                           {report.org_name && (
                             <p className="text-xs text-gray-400 flex items-center gap-1 mt-1">
                               <FiHome className="text-xs" /> {report.org_name}
@@ -976,7 +1013,6 @@ export default function TeacherReviewsClient() {
                       <span className="flex items-center gap-1">
                         <FiCalendar /> Илгээсэн: {formatDate(selectedReport.submitted_at)}
                       </span>
-                      {/* Байгууллагын нэр - ЭНД ХАРУУЛЖ БАЙНА */}
                       {selectedReport.org_name && (
                         <span className="flex items-center gap-1">
                           <FiHome /> Байгууллага: {selectedReport.org_name}
@@ -992,14 +1028,18 @@ export default function TeacherReviewsClient() {
                   {getStatusBadge(selectedReport.report_status)}
                 </div>
 
+                {/* Preview of report content */}
                 <div
                   onClick={() => router.push(`/teacher/reviews/${selectedReport.id}`)}
                   className="relative bg-white rounded-2xl p-5 shadow-md border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer mb-6"
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-t-2xl" />
-                  <div className="mt-2 space-y-3">
-                    <div className="border-t border-gray-100 my-2" />
-                    <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[250px] overflow-y-auto text-sm leading-relaxed">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-500">Тайлангийн агуулга</span>
+                    <span className="text-xs text-blue-600">Дэлгэрэнгүй харах →</span>
+                  </div>
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[200px] overflow-y-auto text-sm leading-relaxed">
                       {selectedReport.content || "Тайлангийн дэлгэрэнгүй харахын тулд дарна уу..."}
                     </div>
                   </div>

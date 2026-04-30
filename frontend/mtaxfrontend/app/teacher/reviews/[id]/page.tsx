@@ -18,10 +18,11 @@ import {
   FiBriefcase,
   FiUser,
   FiSend,
+  FiArrowRight,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher, FaUser } from "react-icons/fa";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Header from "@/app/component/Header";
 import { API_BASE_URL } from "@/api_base_url/page";
 
@@ -104,6 +105,7 @@ const RenderFields = ({ fields, level = 0 }: { fields: any[]; level?: number }) 
 export default function TeacherReportViewPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const reportId = params.id as string;
   
   const [isLoading, setIsLoading] = useState(true);
@@ -339,15 +341,16 @@ export default function TeacherReportViewPage() {
     window.print();
   };
 
+  // Буцах үед одоогийн filter-ыг хадгалж, reportId-г дамжуулах
   const handleGoBack = () => {
-    router.push("/teacher/reviews");
+    const currentFilter = searchParams.get('filter') || 'all';
+    router.push(`/teacher/reviews?reportId=${reportId}&filter=${currentFilter}`);
   };
 
   // Comments section component
   const CommentsSection = () => {
     const currentUserId = userInfo?.id;
     
-    // Separate teacher feedback from regular comments
     const teacherFeedback = report?.feedback ? {
       comment_text: report.feedback,
       created_at: report.reviewed_at,
@@ -368,7 +371,6 @@ export default function TeacherReportViewPage() {
           </div>
         </div>
         <div className="p-6 space-y-4">
-          {/* Write new comment section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -404,7 +406,6 @@ export default function TeacherReportViewPage() {
             </div>
           </div>
           
-          {/* Teacher's feedback (from status change) */}
           {teacherFeedback && teacherFeedback.comment_text && (
             <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
               <div className="flex items-start gap-3">
@@ -440,7 +441,6 @@ export default function TeacherReportViewPage() {
             </div>
           )}
           
-          {/* Regular comments from all users */}
           {regularComments.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
@@ -547,6 +547,7 @@ export default function TeacherReportViewPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-white to-[#eef2ff]">
       <Header />
+      
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Navigation */}
@@ -578,6 +579,16 @@ export default function TeacherReportViewPage() {
             </button>
           </div>
         </div>
+        {/* Simple text notification */}
+{(
+  <div className="mb-6 text-center text-sm text-gray-500">
+    <span className="inline-flex items-center gap-1">
+      
+      Та тайланг баталгаажуулах болон буцаах үйлдэл хийхийн тулд  "Буцах" товч дарна уу
+      <FiArrowRight className="text-sm" />
+    </span>
+  </div>
+)}
 
         {/* Report Header */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-6">
@@ -596,7 +607,6 @@ export default function TeacherReportViewPage() {
 
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Student Info */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -612,7 +622,6 @@ export default function TeacherReportViewPage() {
                 </p>
               </div>
               
-              {/* Organization Info */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -627,7 +636,6 @@ export default function TeacherReportViewPage() {
                 )}
               </div>
               
-              {/* Submitted Date */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
@@ -649,7 +657,6 @@ export default function TeacherReportViewPage() {
                 )}
               </div>
               
-              {/* Reviewed By */}
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
