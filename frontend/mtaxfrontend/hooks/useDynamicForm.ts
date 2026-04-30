@@ -266,28 +266,114 @@ export const useDynamicForm = ({
     };
   }, [schema, values]);
 
+  /**
+   * Extract values from report_data - Supports multiple formats:
+   * 1. Direct { "1": "0", "2": "0" } format
+   * 2. { sections: [...] } format (from deploy)
+   * 3. JSON string format
+   */
   const extractValuesFromReportData = useCallback((reportData: any): Record<string, string> => {
+    console.log("=== extractValuesFromReportData ===");
+    console.log("Input type:", typeof reportData);
+    console.log("Input:", reportData);
+    
+    if (!reportData) {
+      console.log("No report_data found");
+      return {};
+    }
+    
     const extractedValues: Record<string, string> = {};
     
-    const extractFromFields = (fields: any[]) => {
-      for (const field of fields) {
-        if (field.id) {
-          if (field.result !== undefined && field.result !== null) {
-            extractedValues[field.id] = parseBackendValue(field.result).toString();
-          } else if (field.value !== undefined && field.value !== null) {
-            extractedValues[field.id] = field.value.toString();
+    // Case 1: Direct { "1": "0", "2": "0" } format (flat object)
+    if (typeof reportData === "object" && !reportData.sections && !reportData.fields) {
+      console.log("Direct object mode detected");
+      for (const [key, value] of Object.entries(reportData)) {
+        if (typeof value === "string" || typeof value === "number") {
+          extractedValues[key] = String(value);
+        }
+      }
+      console.log("Direct object mode - extracted keys:", Object.keys(extractedValues).length);
+      return extractedValues;
+    }
+    
+    // Case 2: { sections: [...] } format (from deploy or local with nested structure)
+    if (typeof reportData === "object" && reportData.sections) {
+      console.log("Sections mode detected");
+      console.log("Sections count:", reportData.sections.length);
+      
+      const extractFromFields = (fields: any[]) => {
+        for (const field of fields) {
+          if (field.id) {
+            // Get value from field.result or field.value
+            let rawValue = null;
+            if (field.result !== undefined && field.result !== null) {
+              rawValue = field.result;
+            } else if (field.value !== undefined && field.value !== null) {
+              rawValue = field.value;
+            }
+            
+            if (rawValue !== null) {
+              extractedValues[field.id] = parseBackendValue(rawValue).toString();
+            }
+          }
+          if (field.children && field.children.length > 0) {
+            extractFromFields(field.children);
           }
         }
-        if (field.children?.length) extractFromFields(field.children);
-      }
-    };
-    
-    if (reportData?.sections) {
+      };
+      
       for (const section of reportData.sections) {
-        if (section.fields) extractFromFields(section.fields);
+        if (section.fields) {
+          extractFromFields(section.fields);
+        }
+      }
+      
+      console.log("Sections mode - extracted keys:", Object.keys(extractedValues).length);
+      console.log("Sample extracted values:", Object.entries(extractedValues).slice(0, 5));
+      return extractedValues;
+    }
+    
+    // Case 3: { fields: [...] } format (alternative)
+    if (typeof reportData === "object" && reportData.fields) {
+      console.log("Fields mode detected");
+      
+      const extractFromFields = (fields: any[]) => {
+        for (const field of fields) {
+          if (field.id) {
+            let rawValue = null;
+            if (field.result !== undefined && field.result !== null) {
+              rawValue = field.result;
+            } else if (field.value !== undefined && field.value !== null) {
+              rawValue = field.value;
+            }
+            
+            if (rawValue !== null) {
+              extractedValues[field.id] = parseBackendValue(rawValue).toString();
+            }
+          }
+          if (field.children && field.children.length > 0) {
+            extractFromFields(field.children);
+          }
+        }
+      };
+      
+      extractFromFields(reportData.fields);
+      console.log("Fields mode - extracted keys:", Object.keys(extractedValues).length);
+      return extractedValues;
+    }
+    
+    // Case 4: JSON string
+    if (typeof reportData === "string") {
+      try {
+        const parsed = JSON.parse(reportData);
+        console.log("Parsed JSON string - calling recursively");
+        return extractValuesFromReportData(parsed);
+      } catch (e) {
+        console.error("JSON parse error:", e);
       }
     }
     
+    console.log("Unknown format - returning empty object");
     return extractedValues;
   }, []);
 

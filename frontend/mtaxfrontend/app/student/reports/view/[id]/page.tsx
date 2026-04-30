@@ -78,7 +78,7 @@ export default function DynamicReportPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
-  const [reportType, setReportType] = useState<ReportType | null>(null);
+  const [reportTypeId, setReportTypeId] = useState<number | undefined>(undefined);
   const [reportName, setReportName] = useState<string>("");
   const [isClearedAndLocked, setIsClearedAndLocked] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
@@ -86,14 +86,15 @@ export default function DynamicReportPage() {
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [userInfo, setUserInfo] = useState<{ id: number; first_name: string; last_name: string; email: string; role: string } | null>(null);
+  const [extractedFormValues, setExtractedFormValues] = useState<Record<string, string>>({});
   
-  // Use ref for comment input to avoid re-render issues
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const reportIdRef = useRef<number | undefined>(undefined);
 
-  // Dynamic Form Hook
+  // Dynamic Form Hook - initialValues-г дамжуулах
   const formHook = useDynamicForm({
-    reportTypeId: reportType?.id,
+    reportTypeId: reportTypeId,
+    initialValues: extractedFormValues,
     autoLoad: true
   });
   
@@ -168,7 +169,6 @@ export default function DynamicReportPage() {
       console.log("Send comment response:", data);
       
       if (data.resultCode === 9020) {
-        // Clear textarea
         if (commentInputRef.current) {
           commentInputRef.current.value = "";
         }
@@ -185,57 +185,6 @@ export default function DynamicReportPage() {
       setIsSendingComment(false);
     }
   };
-
-  // Fetch report type and data
-  useEffect(() => {
-    const fetchReportInfo = async () => {
-      if (!reportId || isNaN(parseInt(reportId))) {
-        setSubmitError("Тайлангийн ID буруу байна");
-        setIsLoadingReport(false);
-        return;
-      }
-      
-      const parsedId = parseInt(reportId);
-      reportIdRef.current = parsedId;
-      
-      try {
-        const result = await reportTypeService.getReportWithSchema(parsedId);
-        console.log("getReportWithSchema result:", result);
-        
-        if (result) {
-          setReportType(result.reportType);
-          setReportName(result.reportType?.type_name || "Тайлан");
-          
-          if (result.report.org_id && result.report.org_name) {
-            setOrganization({ id: result.report.org_id, name: result.report.org_name });
-          }
-          
-          // Extract values from report_data
-          if (result.report.report_data) {
-            const extractedValues = extractValuesFromReportData(result.report.report_data);
-            if (Object.keys(extractedValues).length > 0) {
-              setValues(extractedValues);
-            }
-          }
-          
-          // Fetch submission info
-          await fetchSubmissionInfo(parsedId);
-          
-          // Fetch comments
-          await fetchComments(parsedId);
-        } else {
-          setSubmitError("Тайлангийн мэдээлэл олдсонгүй");
-        }
-      } catch (error) {
-        console.error("Error fetching report:", error);
-        setSubmitError("Тайлан ачаалахад алдаа гарлаа");
-      } finally {
-        setIsLoadingReport(false);
-      }
-    };
-    
-    fetchReportInfo();
-  }, [reportId]);
 
   const fetchSubmissionInfo = async (reportId: number) => {
     try {
@@ -262,6 +211,61 @@ export default function DynamicReportPage() {
       console.error("Error fetching submission:", error);
     }
   };
+
+  // Fetch report data
+  useEffect(() => {
+    const fetchReportInfo = async () => {
+      if (!reportId || isNaN(parseInt(reportId))) {
+        setSubmitError("Тайлангийн ID буруу байна");
+        setIsLoadingReport(false);
+        return;
+      }
+      
+      const parsedId = parseInt(reportId);
+      reportIdRef.current = parsedId;
+      
+      try {
+        const result = await reportTypeService.getReportWithSchema(parsedId);
+        console.log("getReportWithSchema result:", result);
+        
+        if (result) {
+          // Report type ID-г set хийх
+          const typeId = result.reportType?.id;
+          setReportTypeId(typeId);
+          setReportName(result.reportType?.type_name || "Тайлан");
+          
+          if (result.report.org_id && result.report.org_name) {
+            setOrganization({ id: result.report.org_id, name: result.report.org_name });
+          }
+          
+          // Extract values from report_data
+          if (result.report.report_data) {
+            console.log("Calling extractValuesFromReportData with:", result.report.report_data);
+            const extractedValues = extractValuesFromReportData(result.report.report_data);
+            console.log("Extracted values:", extractedValues);
+            console.log("Extracted values count:", Object.keys(extractedValues).length);
+            
+            if (Object.keys(extractedValues).length > 0) {
+              // extractedFormValues state-д хадгалах (useDynamicForm-д initialValues-р дамжина)
+              setExtractedFormValues(extractedValues);
+              // Шууд setValues дуудах
+              setValues(extractedValues);
+            }
+          }
+          
+          await fetchSubmissionInfo(parsedId);
+          await fetchComments(parsedId);
+        }
+      } catch (error) {
+        console.error("Error:", error);
+        setSubmitError("Тайлан ачаалахад алдаа гарлаа");
+      } finally {
+        setIsLoadingReport(false);
+      }
+    };
+    
+    fetchReportInfo();
+  }, [reportId]);
 
   const fetchTeachers = async () => {
     setIsLoadingTeachers(true);
@@ -415,7 +419,7 @@ export default function DynamicReportPage() {
   const getStatusMessage = () => {
     if (isClearedAndLocked) {
       return { 
-        message: "Маягт X тайлан болсон байна. Та багшаа сонгоод тайлангаа илгээнэ үү.", 
+        message: "Маягт тэглэгдэж түгжсэн байна. Та багшаа сонгоод тайлангаа илгээнэ үү.", 
         color: "bg-orange-50 border-orange-200 text-orange-700", 
         icon: <FiAlertCircle className="text-orange-600" /> 
       };
@@ -437,7 +441,6 @@ export default function DynamicReportPage() {
   const CommentsSection = () => {
     const currentUserId = userInfo?.id;
     
-    // Teacher feedback from submission
     const teacherFeedback = feedback ? {
       comment_text: feedback,
       created_at: submittedAt,
@@ -448,7 +451,6 @@ export default function DynamicReportPage() {
       user_id: teacherId,
     } : null;
     
-    // Regular comments from API
     const regularComments = comments.filter(c => c.comment_text !== feedback);
     
     return (
@@ -460,7 +462,6 @@ export default function DynamicReportPage() {
           </div>
         </div>
         <div className="p-6 space-y-4">
-          {/* Write new comment section */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -496,7 +497,6 @@ export default function DynamicReportPage() {
             </div>
           </div>
           
-          {/* Teacher's feedback (from status change) */}
           {teacherFeedback && teacherFeedback.comment_text && (
             <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
               <div className="flex items-start gap-3">
@@ -518,21 +518,11 @@ export default function DynamicReportPage() {
                   <div className="bg-white rounded-lg p-3 mt-2">
                     <p className="text-gray-700 whitespace-pre-wrap">{teacherFeedback.comment_text}</p>
                   </div>
-                  <div className="mt-2">
-                    <span className={`text-xs font-medium ${
-                      currentStatus === "Баталгаажсан" ? "text-green-600" : 
-                      currentStatus === "Буцаасан" ? "text-red-600" : "text-orange-600"
-                    }`}>
-                      {currentStatus === "Баталгаажсан" ? "✅ Баталгаажуулсан" : 
-                       currentStatus === "Буцаасан" ? "❌ Буцаасан" : "📝 Сэтгэгдэл"}
-                    </span>
-                  </div>
                 </div>
               </div>
             </div>
           )}
           
-          {/* Regular comments from all users */}
           {regularComments.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-600 flex items-center gap-2">
@@ -900,7 +890,6 @@ export default function DynamicReportPage() {
       <TeacherSelectionModal />
       <SubmitConfirmModal />
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Breadcrumb Navigation */}
         <div className="flex items-center gap-2 text-sm text-gray-600 mb-6 flex-wrap">
           <Link href="/" className="hover:text-blue-600 flex items-center gap-1">
             <FiHome className="text-sm" /> Нүүр
@@ -919,7 +908,6 @@ export default function DynamicReportPage() {
           </span>
         </div>
 
-        {/* Organization Info Card */}
         {organization && (
           <div className="mb-6 bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
             <div className="flex items-center gap-3">
@@ -957,7 +945,7 @@ export default function DynamicReportPage() {
               </span>
               {isClearedAndLocked && (
                 <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                  X тайлан
+                  Тэглэгдсэн
                 </span>
               )}
             </p>
@@ -1029,10 +1017,8 @@ export default function DynamicReportPage() {
           )}
         </div>
 
-        {/* Dynamic Form */}
         <DynamicForm formHook={formHook} isLocked={locked} />
 
-        {/* Comments Section */}
         <CommentsSection />
 
         <div className="mt-8 text-center text-sm text-gray-500">
