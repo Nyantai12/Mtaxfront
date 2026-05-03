@@ -8,6 +8,8 @@ import {
   FiSave, FiSend, FiRefreshCw, FiAlertCircle, FiCheckCircle,
   FiHome, FiFileText, FiMessageSquare, FiSearch, FiX, FiMail, FiClock,
   FiXCircle, FiUser, FiSend as FiSendIcon,
+  FiArrowRight,
+  FiCalendar,
 } from "react-icons/fi";
 import { FaChalkboardTeacher, FaUserCheck } from "react-icons/fa";
 import Link from "next/link";
@@ -16,7 +18,7 @@ import Header from "@/app/component/Header";
 import { API_BASE_URL } from "@/api_base_url/page";
 import { useDynamicForm, formatAsMoney } from "@/hooks/useDynamicForm";
 import { DynamicForm } from "@/components/DynamicForm";
-import { reportTypeService, ReportType } from "@/services/reportTypeService";
+import { reportTypeService } from "@/services/reportTypeService";
 
 interface Teacher {
   id: number;
@@ -87,11 +89,19 @@ export default function DynamicReportPage() {
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [userInfo, setUserInfo] = useState<{ id: number; first_name: string; last_name: string; email: string; role: string } | null>(null);
   const [extractedFormValues, setExtractedFormValues] = useState<Record<string, string>>({});
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(1);
+  const [reportYear, setReportYear] = useState<number>(new Date().getFullYear());
   
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const reportIdRef = useRef<number | undefined>(undefined);
 
-  // Dynamic Form Hook - initialValues-г дамжуулах
+  const quarters = [
+    { value: 1, label: "1-р улирал" },
+    { value: 2, label: "2-р улирал" },
+    { value: 3, label: "3-р улирал" },
+    { value: 4, label: "4-р улирал" },
+  ];
+
   const formHook = useDynamicForm({
     reportTypeId: reportTypeId,
     initialValues: extractedFormValues,
@@ -100,11 +110,10 @@ export default function DynamicReportPage() {
   
   const { 
     values, setValues, isLoading: isFormLoading, error: formError,
-    resetValues, clearAndLock, unlock, isLocked, 
+    clearAndLock, unlock, isLocked, 
     buildReportData, extractValuesFromReportData
   } = formHook;
 
-  // Get user info from localStorage
   useEffect(() => {
     const user = localStorage.getItem("user");
     if (user) {
@@ -119,7 +128,6 @@ export default function DynamicReportPage() {
     }
   }, []);
 
-  // Fetch comments for this report
   const fetchComments = async (reportId: number) => {
     setIsLoadingComments(true);
     try {
@@ -129,7 +137,6 @@ export default function DynamicReportPage() {
         headers: { "Content-Type": "application/json" }
       });
       const data = await response.json();
-      console.log("Comments data:", data);
       
       if (data.resultCode === 9050 && data.data) {
         setComments(data.data);
@@ -141,7 +148,6 @@ export default function DynamicReportPage() {
     }
   };
 
-  // Send new comment
   const sendComment = async () => {
     const commentText = commentInputRef.current?.value || "";
     
@@ -161,12 +167,9 @@ export default function DynamicReportPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          comment_text: commentText,
-        }),
+        body: JSON.stringify({ comment_text: commentText }),
       });
       const data = await response.json();
-      console.log("Send comment response:", data);
       
       if (data.resultCode === 9020) {
         if (commentInputRef.current) {
@@ -186,6 +189,27 @@ export default function DynamicReportPage() {
     }
   };
 
+  const saveQuarterInfo = async (quarter: number, year: number) => {
+    if (!reportIdRef.current) return;
+    try {
+      await fetch(`${API_BASE_URL}/api/report/savereportquarter/${reportIdRef.current}/`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quarter, year }),
+      });
+    } catch (error) {
+      console.error("Error saving quarter:", error);
+    }
+  };
+
+  const handleQuarterChange = (quarter: number) => {
+    setSelectedQuarter(quarter);
+    if (reportIdRef.current) {
+      saveQuarterInfo(quarter, reportYear);
+    }
+  };
+
   const fetchSubmissionInfo = async (reportId: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/report/submissionlist/`, {
@@ -194,7 +218,6 @@ export default function DynamicReportPage() {
         headers: { "Content-Type": "application/json" }
       });
       const data = await response.json();
-      console.log("Submission list:", data);
       
       if (data.resultCode === 6130 && data.data) {
         const submission = data.data.find((item: any) => item.report_id === reportId);
@@ -212,7 +235,6 @@ export default function DynamicReportPage() {
     }
   };
 
-  // Fetch report data
   useEffect(() => {
     const fetchReportInfo = async () => {
       if (!reportId || isNaN(parseInt(reportId))) {
@@ -226,10 +248,8 @@ export default function DynamicReportPage() {
       
       try {
         const result = await reportTypeService.getReportWithSchema(parsedId);
-        console.log("getReportWithSchema result:", result);
         
         if (result) {
-          // Report type ID-г set хийх
           const typeId = result.reportType?.id;
           setReportTypeId(typeId);
           setReportName(result.reportType?.type_name || "Тайлан");
@@ -238,17 +258,17 @@ export default function DynamicReportPage() {
             setOrganization({ id: result.report.org_id, name: result.report.org_name });
           }
           
-          // Extract values from report_data
+          if (result.report.quarter) {
+            setSelectedQuarter(result.report.quarter);
+          }
+          if (result.report.report_year) {
+            setReportYear(result.report.report_year);
+          }
+          
           if (result.report.report_data) {
-            console.log("Calling extractValuesFromReportData with:", result.report.report_data);
             const extractedValues = extractValuesFromReportData(result.report.report_data);
-            console.log("Extracted values:", extractedValues);
-            console.log("Extracted values count:", Object.keys(extractedValues).length);
-            
             if (Object.keys(extractedValues).length > 0) {
-              // extractedFormValues state-д хадгалах (useDynamicForm-д initialValues-р дамжина)
               setExtractedFormValues(extractedValues);
-              // Шууд setValues дуудах
               setValues(extractedValues);
             }
           }
@@ -338,13 +358,12 @@ export default function DynamicReportPage() {
 
     try {
       const reportData = buildReportData();
-      console.log("Saving report data:", reportData);
       
       const saveResponse = await fetch(`${API_BASE_URL}/api/report/savereportfields/${currentReportId}/`, {
         method: "POST", 
         headers: { "Content-Type": "application/json" }, 
         credentials: "include",
-        body: JSON.stringify({ report_data: reportData })
+        body: JSON.stringify({ report_data: reportData, quarter: selectedQuarter, report_year: reportYear })
       });
       const saveData = await saveResponse.json();
 
@@ -419,7 +438,7 @@ export default function DynamicReportPage() {
   const getStatusMessage = () => {
     if (isClearedAndLocked) {
       return { 
-        message: "Маягт тэглэгдэж түгжсэн байна. Та багшаа сонгоод тайлангаа илгээнэ үү.", 
+        message: "Маягт X тайлан болсон байна. Та багшаа сонгоод тайлангаа илгээнэ үү.", 
         color: "bg-orange-50 border-orange-200 text-orange-700", 
         icon: <FiAlertCircle className="text-orange-600" /> 
       };
@@ -437,7 +456,89 @@ export default function DynamicReportPage() {
     }
   };
 
-  // Comment section component
+  const QuarterSelector = () => {
+    // Хэрэв тайлан хүлээгдэж буй эсвэл баталгаажсан бол зөвхөн текст харуулах
+    const showFullSelector = currentStatus === "Илгээгээгүй" || currentStatus === "Буцаасан" || isClearedAndLocked;
+    
+    if (!showFullSelector) {
+      // Хүлээгдэж буй эсвэл Баталгаажсан үед жижиг текст харуулах
+      return (
+        <div className="mb-6 bg-gray-50 rounded-xl border border-gray-200 p-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <FiCalendar className="text-gray-500 text-sm" />
+              <span className="text-sm text-gray-600">Тайлангийн улирал:</span>
+              <span className="text-sm font-medium text-gray-800">{selectedQuarter}-р улирал</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Тайлангийн жил:</span>
+              <span className="text-sm font-medium text-gray-800">{reportYear}</span>
+            </div>
+            {isClearedAndLocked && (
+              <div className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
+                X тайлан
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    // Илгээгээгүй эсвэл Буцаасан үед бүрэн сонголт харуулах
+    return (
+      <div className="mb-6 bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+            <FiCalendar className="text-purple-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Тайлангийн улирал</h3>
+            <p className="text-sm text-gray-500">Тайлангаа аль улиралд илгээж байгаа сонгоно уу</p>
+          </div>
+          {isClearedAndLocked && (
+            <div className="ml-auto px-3 py-1.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium flex items-center gap-1">
+              <FiXCircle className="text-orange-600 text-sm" />
+              X тайлан
+            </div>
+          )}
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {quarters.map((q) => (
+            <button
+              key={q.value}
+              onClick={() => handleQuarterChange(q.value)}
+              disabled={isReportLocked()}
+              className={`py-2 px-3 rounded-xl border-2 transition flex flex-col items-center gap-1 ${
+                selectedQuarter === q.value
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
+              } ${isReportLocked() ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <span className={`text-sm font-medium ${selectedQuarter === q.value ? "text-blue-600" : "text-gray-600"}`}>
+                {q.label}
+              </span>
+              {selectedQuarter === q.value && (
+                <FiCheckCircle className="text-blue-600 text-xs" />
+              )}
+            </button>
+          ))}
+        </div>
+        
+        <div className="mt-4 pt-3 border-t border-gray-100">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">
+              Сонгосон улирал: <strong className="text-gray-700">{selectedQuarter}-р улирал</strong>
+            </span>
+            <span className="text-sm text-gray-500">
+              Тайлангийн жил: <strong className="text-gray-700">{reportYear}</strong>
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const CommentsSection = () => {
     const currentUserId = userInfo?.id;
     
@@ -853,7 +954,6 @@ export default function DynamicReportPage() {
     </AnimatePresence>
   );
 
-  // Loading state
   if (isLoadingReport || isFormLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -922,6 +1022,8 @@ export default function DynamicReportPage() {
           </div>
         )}
 
+        <QuarterSelector />
+
         {statusInfo && (
           <div className={`mb-6 p-4 ${statusInfo.color} rounded-xl border flex items-center gap-3`}>
             {statusInfo.icon} <span className="font-medium">{statusInfo.message}</span>
@@ -945,7 +1047,7 @@ export default function DynamicReportPage() {
               </span>
               {isClearedAndLocked && (
                 <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                  Тэглэгдсэн
+                  X тайлан
                 </span>
               )}
             </p>
@@ -967,18 +1069,12 @@ export default function DynamicReportPage() {
         )}
 
         <div className="flex gap-3 mb-6 items-center">
-          <button onClick={resetValues} disabled={locked} className={`px-4 py-2 rounded-xl flex items-center gap-2 transition ${
-            locked ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white border border-gray-300 hover:bg-gray-50 text-gray-700"
-          }`}>
-            <FiRefreshCw /> Бүгдийг 0 болгох
-          </button>
-          
           {!locked && (
             <button onClick={() => saveReport(true)} disabled={isSavingDraft} className="px-5 py-2 rounded-xl flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 transition">
-              {isSavingDraft ? <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" /> : <><FiSave /> Ноорог хадгалах</>}
+              {isSavingDraft ? <div className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" /> : <><FiSave /> Хадгалах</>}
             </button>
           )}
-          
+          <p className="flex items-center text-sm text-gray-500">Тухайн тайлант хугацаанд үйл ажиллагаа явуулаагүй бол энд тэмдэглэнэ үү. <FiArrowRight /></p>
           <button
             onClick={() => {
               if (isClearedAndLocked) {
@@ -996,7 +1092,7 @@ export default function DynamicReportPage() {
           >
             <FiXCircle className={isClearedAndLocked ? "text-green-600" : "text-red-600"} />
             <span className="text-sm font-medium">
-              {isClearedAndLocked ? "Тэглэгдэж түгжсэн" : "Тэглэх & Түгжих"}
+              {isClearedAndLocked ? "Маягт X тайлан болсон" : "X тайлан"}
             </span>
           </button>
           

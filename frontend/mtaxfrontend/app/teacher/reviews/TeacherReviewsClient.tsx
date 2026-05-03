@@ -1,7 +1,7 @@
 // app/teacher/reviews/TeacherReviewsClient.tsx
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   FiFileText,
@@ -19,7 +19,10 @@ import {
   FiChevronRight,
   FiX,
   FiHome,
+  FiFilter,
+  FiDownload,
 } from "react-icons/fi";
+import { FaGraduationCap, FaChalkboardTeacher, FaUserShield } from "react-icons/fa";
 import Header from "@/app/component/Header";
 import { useRouter, useSearchParams } from "next/navigation";
 import { API_BASE_URL } from "@/api_base_url/page";
@@ -53,12 +56,8 @@ interface Report {
   comments?: Comment[];
   org_id?: number;
   org_name?: string;
-  tax_period_year?: number;
-  tax_period_month?: number;
-  total_income?: string;
-  total_tax_amount?: string;
-  created_at?: string;
-  updated_at?: string;
+  quarter?: number;
+  report_year?: number;
 }
 
 interface TeacherInfo {
@@ -134,6 +133,17 @@ const mapEnglishStatusToMongolian = (englishStatus: string): string => {
   }
 };
 
+const getQuarterLabel = (quarter: number) => {
+  const quarters = [
+    { value: 1, label: "1-р улирал" },
+    { value: 2, label: "2-р улирал" },
+    { value: 3, label: "3-р улирал" },
+    { value: 4, label: "4-р улирал" },
+  ];
+  const q = quarters.find(q => q.value === quarter);
+  return q ? q.label : `${quarter}-р улирал`;
+};
+
 export default function TeacherReviewsClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -154,9 +164,15 @@ export default function TeacherReviewsClient() {
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(3);
-  
-  const hasRestoredSelection = useRef(false);
-  const selectedReportRef = useRef<HTMLDivElement>(null);
+
+  // Quarter filter options
+  const quarterOptions = [
+    { value: "all", label: "Бүх улирал" },
+    { value: "1", label: "1-р улирал" },
+    { value: "2", label: "2-р улирал" },
+    { value: "3", label: "3-р улирал" },
+    { value: "4", label: "4-р улирал" },
+  ];
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -182,45 +198,30 @@ export default function TeacherReviewsClient() {
   }, [teacherInfo]);
 
   useEffect(() => {
+    const reportIdFromUrl = searchParams.get('reportId');
     const filterFromUrl = searchParams.get('filter');
+    const quarterFromUrl = searchParams.get('quarter');
+    
     if (filterFromUrl && ["all", "pending", "approved", "rejected"].includes(filterFromUrl)) {
       setFilterStatus(filterFromUrl);
     }
-  }, [searchParams]);
-
-  // Restore selected report and scroll to correct page
-  useEffect(() => {
-    const reportIdFromUrl = searchParams.get('reportId');
-    const filterFromUrl = searchParams.get('filter');
     
-    if (reports.length > 0 && reportIdFromUrl && !hasRestoredSelection.current) {
+    
+    if (reportIdFromUrl && reports.length > 0) {
       const foundReport = reports.find(r => r.id === parseInt(reportIdFromUrl));
-      if (foundReport) {
-        console.log("Restoring selected report:", foundReport.id);
+      if (foundReport && (!selectedReport || selectedReport.id !== foundReport.id)) {
         setSelectedReport(foundReport);
         setCommentText(foundReport.feedback || "");
         fetchReportDetail(foundReport.id);
-        hasRestoredSelection.current = true;
-        
-        // Find and scroll to the page containing this report
-        setTimeout(() => {
-          const reportElement = document.getElementById(`report-${foundReport.id}`);
-          if (reportElement) {
-            reportElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            reportElement.classList.add('ring-2', 'ring-blue-500');
-            setTimeout(() => {
-              reportElement.classList.remove('ring-2', 'ring-blue-500');
-            }, 2000);
-          }
-        }, 500);
       }
+    } else if (!reportIdFromUrl) {
+      setSelectedReport(null);
     }
-  }, [reports, searchParams]);
+  }, [reports, searchParams, selectedReport]);
 
   useEffect(() => {
     setCurrentPage(1);
     setSelectedReport(null);
-    hasRestoredSelection.current = false;
   }, [filterStatus, searchQuery, startDate, endDate]);
 
   const fetchReports = async () => {
@@ -235,7 +236,6 @@ export default function TeacherReviewsClient() {
       });
 
       const data = await response.json();
-      console.log("Teacher reports data:", data);
 
       if (data.resultCode === 7640 && data.data) {
         const reportList = data.data;
@@ -276,13 +276,9 @@ export default function TeacherReviewsClient() {
             feedback: item.feedback,
             comments: item.comments || [],
             org_id: item.org_id,
-            org_name: item.org_name || "",
-            tax_period_year: item.tax_period_year,
-            tax_period_month: item.tax_period_month,
-            total_income: item.total_income,
-            total_tax_amount: item.total_tax_amount,
-            created_at: item.created_at,
-            updated_at: item.updated_at,
+            org_name: item.org_name,
+            quarter: item.quarter || 1,
+            report_year: item.report_year || new Date().getFullYear(),
           };
           
           reportsMap.set(reportId, report);
@@ -513,8 +509,6 @@ export default function TeacherReviewsClient() {
 
   const handleFilterChange = (newFilter: string) => {
     setFilterStatus(newFilter);
-    setSelectedReport(null);
-    hasRestoredSelection.current = false;
     const currentReportId = searchParams.get('reportId');
     if (currentReportId) {
       router.push(`/teacher/reviews?reportId=${currentReportId}&filter=${newFilter}`, { scroll: false });
@@ -523,9 +517,11 @@ export default function TeacherReviewsClient() {
     }
   };
 
+
   const getFilteredAndSortedReports = useCallback(() => {
     let filtered = [...reports];
     
+    // Status filter
     if (filterStatus !== "all") {
       if (filterStatus === "pending") {
         filtered = filtered.filter(r => {
@@ -545,6 +541,10 @@ export default function TeacherReviewsClient() {
       }
     }
     
+    // Quarter filter
+  
+    
+    // Date filter
     if (startDate) {
       const startDateTime = new Date(startDate);
       startDateTime.setHours(0, 0, 0, 0);
@@ -556,6 +556,7 @@ export default function TeacherReviewsClient() {
       filtered = filtered.filter(r => new Date(r.submitted_at) <= endDateTime);
     }
     
+    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(r => 
@@ -567,6 +568,7 @@ export default function TeacherReviewsClient() {
       );
     }
     
+    // Sort by date
     filtered.sort((a, b) => {
       if (sortOrder === "desc") {
         return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
@@ -583,7 +585,6 @@ export default function TeacherReviewsClient() {
   const hasActiveFilters = filterStatus !== "all" || searchQuery || hasDateFilter;
 
   const clearAllFilters = () => {
-    const currentReportId = searchParams.get('reportId');
     setFilterStatus("all");
     setSearchQuery("");
     setStartDate("");
@@ -592,13 +593,7 @@ export default function TeacherReviewsClient() {
     setTempStartDate("");
     setTempEndDate("");
     setShowDateFilter(false);
-    setSelectedReport(null);
-    hasRestoredSelection.current = false;
-    if (currentReportId) {
-      router.push(`/teacher/reviews?reportId=${currentReportId}`, { scroll: false });
-    } else {
-      router.push('/teacher/reviews', { scroll: false });
-    }
+    router.push('/teacher/reviews', { scroll: false });
   };
 
   const resetDateFilter = () => {
@@ -623,10 +618,34 @@ export default function TeacherReviewsClient() {
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
-      if (selectedReport) {
-        router.push(`/teacher/reviews?reportId=${selectedReport.id}&filter=${filterStatus}`, { scroll: false });
-      }
+      setSelectedReport(null);
     }
+  };
+
+  const exportToCSV = () => {
+    const headers = ["ID", "Тайлан", "Оюутан", "Имэйл", "Байгууллага", "Улирал", "Төлөв", "Илгээсэн огноо"];
+    const csvData = filteredReports.map(report => [
+      report.id,
+      report.title,
+      report.student_name,
+      report.student_email,
+      report.org_name || "",
+      getQuarterLabel(report.quarter || 1),
+      report.report_status,
+      formatDate(report.submitted_at),
+    ]);
+    
+    const csvContent = [headers, ...csvData].map(row => row.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reports_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const pendingCount = reports.filter(r => {
@@ -641,6 +660,10 @@ export default function TeacherReviewsClient() {
     const status = r.report_status?.toLowerCase() || "";
     return status === "буцаасан" || status === "rejected" || status === "returned";
   }).length;
+  const quarter1Count = reports.filter(r => r.quarter === 1).length;
+  const quarter2Count = reports.filter(r => r.quarter === 2).length;
+  const quarter3Count = reports.filter(r => r.quarter === 3).length;
+  const quarter4Count = reports.filter(r => r.quarter === 4).length;
 
   if (loading) {
     return (
@@ -682,7 +705,7 @@ export default function TeacherReviewsClient() {
           </div>
         )}
 
-        {/* Statistics Cards */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
             <div className="flex items-center justify-between">
@@ -733,7 +756,7 @@ export default function TeacherReviewsClient() {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Search and Filter */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-8">
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex-1 min-w-[300px]">
@@ -756,6 +779,14 @@ export default function TeacherReviewsClient() {
               >
                 <FiClock />
                 {sortOrder === "desc" ? "Хамгийн сүүлд ирсэн" : "Хамгийн эрт ирсэн"}
+              </button>
+              
+              <button
+                onClick={exportToCSV}
+                className="px-4 py-2 rounded-xl font-medium transition flex items-center gap-2 bg-green-100 text-green-700 hover:bg-green-200"
+              >
+                <FiDownload />
+                CSV Export
               </button>
               
               <div className="relative">
@@ -820,6 +851,7 @@ export default function TeacherReviewsClient() {
             </div>
           </div>
           
+          {/* Status Filter Buttons */}
           <div className="flex gap-2 flex-wrap mt-4">
             <button
               onClick={() => handleFilterChange("all")}
@@ -854,18 +886,46 @@ export default function TeacherReviewsClient() {
               Буцаасан ({rejectedCount})
             </button>
           </div>
+        
+          
+          {/* Active Date Filter Display */}
+          {hasDateFilter && (
+            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+              <span className="text-xs text-gray-500">Идэвхтэй шүүлтүүр:</span>
+              <div className="flex gap-2 flex-wrap">
+                {startDate && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs">
+                    <FiCalendar /> Эхлэх: {new Date(startDate).toLocaleDateString()}
+                    <button onClick={() => { setStartDate(""); setTempStartDate(""); }} className="ml-1 hover:text-blue-900">
+                      <FiX className="text-xs" />
+                    </button>
+                  </span>
+                )}
+                {endDate && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs">
+                    <FiCalendar /> Дуусах: {new Date(endDate).toLocaleDateString()}
+                    <button onClick={() => { setEndDate(""); setTempEndDate(""); }} className="ml-1 hover:text-blue-900">
+                      <FiX className="text-xs" />
+                    </button>
+                  </span>
+                )}
+                {(startDate || endDate) && (
+                  <button
+                    onClick={resetDateFilter}
+                    className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                  >
+                    <FiX /> Цэвэрлэх
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Reports List and Detail */}
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Reports List */}
+          {/* Left Column - Reports List */}
           <div className="lg:col-span-1">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold text-gray-900">Тайлангууд ({filteredReports.length})</h3>
-              <span className="text-xs text-gray-500">
-                {filteredReports.length > 0 ? `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredReports.length)} / ${filteredReports.length}` : "0 / 0"}
-              </span>
-            </div>
             <div className="space-y-4">
               {currentReports.length === 0 ? (
                 <div className="bg-white rounded-2xl p-8 text-center">
@@ -885,12 +945,11 @@ export default function TeacherReviewsClient() {
                   {currentReports.map((report) => (
                     <motion.div
                       key={report.id}
-                      id={`report-${report.id}`}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => handleSelectReport(report)}
                       className={`bg-white rounded-2xl p-4 shadow-lg border-2 cursor-pointer transition ${
-                        selectedReport?.id === report.id ? "border-blue-500 bg-blue-50/30" : "border-gray-100 hover:border-blue-300"
+                        selectedReport?.id === report.id ? "border-blue-500" : "border-gray-100 hover:border-blue-300"
                       }`}
                     >
                       <div className="flex justify-between items-start mb-3">
@@ -907,8 +966,12 @@ export default function TeacherReviewsClient() {
                               <FiHome className="text-xs" /> {report.org_name}
                             </p>
                           )}
+                          {/* Quarter info */}
+                          <p className="text-xs text-purple-500 flex items-center gap-1 mt-1">
+                            <FiCalendar className="text-xs" /> {getQuarterLabel(report.quarter || 1)} / {report.report_year}
+                          </p>
                         </div>
-                        <div className="ml-2 flex-shrink-0">
+                        <div className="ml-2 flex-shrink-0 text-right">
                           {getStatusBadge(report.report_status)}
                         </div>
                       </div>
@@ -989,7 +1052,7 @@ export default function TeacherReviewsClient() {
             </div>
           </div>
 
-          {/* Report Detail */}
+          {/* Right Column - Report Detail with Actions */}
           <div className="lg:col-span-2">
             {selectedReport ? (
               <motion.div
@@ -1018,28 +1081,23 @@ export default function TeacherReviewsClient() {
                           <FiHome /> Байгууллага: {selectedReport.org_name}
                         </span>
                       )}
-                      {selectedReport.tax_period_year && selectedReport.tax_period_month && (
-                        <span className="flex items-center gap-1">
-                          <FiCalendar /> Тайлангийн хугацаа: {selectedReport.tax_period_year} оны {selectedReport.tax_period_month}-р сар
-                        </span>
-                      )}
+                      {/* Quarter info */}
+                      <span className="flex items-center gap-1">
+                        <FiCalendar /> Тайлангийн улирал: {getQuarterLabel(selectedReport.quarter || 1)} / {selectedReport.report_year}
+                      </span>
                     </div>
                   </div>
                   {getStatusBadge(selectedReport.report_status)}
                 </div>
 
-                {/* Preview of report content */}
                 <div
-                  onClick={() => router.push(`/teacher/reviews/${selectedReport.id}`)}
+                  onClick={() => router.push(`/teacher/reviews/${selectedReport.id}?filter=${filterStatus}`)}
                   className="relative bg-white rounded-2xl p-5 shadow-md border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer mb-6"
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-t-2xl" />
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-500">Тайлангийн агуулга</span>
-                    <span className="text-xs text-blue-600">Дэлгэрэнгүй харах →</span>
-                  </div>
-                  <div className="border-t border-gray-100 pt-3">
-                    <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[200px] overflow-y-auto text-sm leading-relaxed">
+                  <div className="mt-2 space-y-3">
+                    <div className="border-t border-gray-100 my-2" />
+                    <div className="bg-gray-50 rounded-lg p-3 text-gray-700 max-h-[250px] overflow-y-auto text-sm leading-relaxed">
                       {selectedReport.content || "Тайлангийн дэлгэрэнгүй харахын тулд дарна уу..."}
                     </div>
                   </div>

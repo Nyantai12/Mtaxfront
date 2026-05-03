@@ -7,7 +7,7 @@ export const parseBackendValue = (result: any): number => {
   if (typeof result === 'number') return isFinite(result) ? result : 0;
   if (typeof result === 'string') {
     if (result.trim() === '') return 0;
-    const cleanValue = result.replace(/[₮,]/g, '').trim();
+    const cleanValue = result.replace(/[₮,\s]/g, '').trim();
     if (cleanValue === '') return 0;
     const parsed = parseFloat(cleanValue);
     return !isNaN(parsed) && isFinite(parsed) ? parsed : 0;
@@ -39,8 +39,12 @@ export const parseInputValue = (value: string): string => {
     cleanValue = cleanValue.substring(0, firstDotIndex + 1) + 
                  cleanValue.substring(firstDotIndex + 1).replace(/\./g, "");
   }
-  const num = parseFloat(cleanValue);
+  let num = parseFloat(cleanValue);
   if (isNaN(num)) return "";
+  
+  // Round to 2 decimal places immediately
+  num = Math.round(num * 100) / 100;
+  
   return num.toString();
 };
 
@@ -63,7 +67,7 @@ export const useDynamicForm = ({
   
   const inputFocusRef = useRef<{ [key: string]: boolean }>({});
   const tempInputValueRef = useRef<{ [key: string]: string }>({});
-  const recalculateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isRecalculatingRef = useRef(false);
 
   const getAllFieldIds = useCallback((fields?: Field[]): string[] => {
     if (!fields) return [];
@@ -90,7 +94,13 @@ export const useDynamicForm = ({
         
         for (const fieldId of allIds) {
           if (initialValues && initialValues[fieldId] !== undefined) {
-            newValues[fieldId] = initialValues[fieldId];
+            const num = parseFloat(initialValues[fieldId]);
+            if (!isNaN(num)) {
+              const rounded = Math.round(num * 100) / 100;
+              newValues[fieldId] = rounded.toString();
+            } else {
+              newValues[fieldId] = initialValues[fieldId];
+            }
           } else {
             newValues[fieldId] = "";
           }
@@ -115,93 +125,199 @@ export const useDynamicForm = ({
 
   useEffect(() => {
     if (schema && initialValues && Object.keys(initialValues).length > 0) {
-      setValues(prev => ({ ...prev, ...initialValues }));
-      setTimeout(() => recalculateAll(), 100);
+      const roundedValues: Record<string, string> = {};
+      for (const [key, value] of Object.entries(initialValues)) {
+        const num = parseFloat(value);
+        if (!isNaN(num)) {
+          const rounded = Math.round(num * 100) / 100;
+          roundedValues[key] = rounded.toString();
+        } else {
+          roundedValues[key] = value;
+        }
+      }
+      setValues(prev => ({ ...prev, ...roundedValues }));
     }
   }, [schema, initialValues]);
 
-  const getValue = useCallback((fieldId: string): number => {
-    const value = values[fieldId];
-    if (!value) return 0;
-    const num = Number(value);
-    return isNaN(num) ? 0 : num;
-  }, [values]);
-
-  const evaluateRule = useCallback((rule?: string): number => {
+  const evaluateRuleWithValues = useCallback((rule: string | undefined, getValueFn: (id: string) => number): number => {
     if (!rule) return 0;
-    let expression = rule.replace(/(\d+(?:\.\d+)?)%/g, (_, p1) => `(${parseFloat(p1) / 100})`);
-    expression = expression.replace(/\b(\d+)\b/g, (match) => getValue(match).toString());
+    
+    let expression = rule;
+    
+    const percentPattern = /(\d+(?:\.\d+)?)%/g;
+    const percentPlaceholders: string[] = [];
+    expression = expression.replace(percentPattern, (match) => {
+      const placeholder = `__PERCENT_${percentPlaceholders.length}__`;
+      percentPlaceholders.push(match);
+      return placeholder;
+    });
+    
+    const fieldIdPattern = /\b(\d+)\b/g;
+    expression = expression.replace(fieldIdPattern, (match) => {
+      const value = getValueFn(match);
+      return value.toString();
+    });
+    
+    expression = expression.replace(/__PERCENT_(\d+)__/g, (_, index) => {
+      const percentMatch = percentPlaceholders[parseInt(index)];
+      const percentValue = parseFloat(percentMatch.replace('%', ''));
+      const decimalValue = percentValue / 100;
+      return decimalValue.toString();
+    });
+    
     try {
       const result = Function('"use strict"; return (' + expression + ')')();
-      return isNaN(result) ? 0 : result;
-    } catch { 
-      return 0; 
+      const numResult = typeof result === 'number' && !isNaN(result) && isFinite(result) ? result : 0;
+      return Math.round(numResult * 100) / 100;
+    } catch (error) {
+      console.error(`Error evaluating expression "${rule}":`, error);
+      return 0;
     }
-  }, [getValue]);
+  }, []);
 
-  const recalculateAll = useCallback(() => {
-    if (!schema) return;
+  const recalculateWithValues = useCallback((currentValues: Record<string, string>): Record<string, string> => {
+    if (!schema) return currentValues;
     
-    setValues(prev => {
-      const newValues = { ...prev };
-      const calculatedFields: Field[] = [];
-      
-      const collect = (fields: Field[]) => {
-        for (const field of fields) {
-          if (field.isCalculated && field.calculationRule) calculatedFields.push(field);
-          if (field.children?.length) collect(field.children);
-        }
-      };
-      
-      collect(schema.sections.flatMap(s => s.fields));
-      
-      for (let i = 0; i < 10; i++) {
-        let changed = false;
-        for (const field of calculatedFields) {
-          if (field.calculationRule) {
-            const result = evaluateRule(field.calculationRule);
-            const current = parseFloat(newValues[field.id] || "0");
-            if (Math.abs(current - result) > 0.001) {
-              newValues[field.id] = result.toString();
-              changed = true;
-            }
+    const calculatedFields: Field[] = [];
+    
+    const collect = (fields: Field[]) => {
+      for (const field of fields) {
+        if (field.isCalculated && field.calculationRule) calculatedFields.push(field);
+        if (field.children?.length) collect(field.children);
+      }
+    };
+    
+    collect(schema.sections.flatMap(s => s.fields));
+    calculatedFields.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    
+    const updatedValues = { ...currentValues };
+    
+    const getValueFromCurrent = (fieldId: string): number => {
+      const value = updatedValues[fieldId];
+      if (!value) return 0;
+      const num = Number(value);
+      return isNaN(num) ? 0 : num;
+    };
+    
+    for (let pass = 0; pass < 10; pass++) {
+      let changed = false;
+      for (const field of calculatedFields) {
+        if (field.calculationRule) {
+          const result = evaluateRuleWithValues(field.calculationRule, getValueFromCurrent);
+          const current = parseFloat(updatedValues[field.id] || "0");
+          if (Math.abs(current - result) > 0.001) {
+            updatedValues[field.id] = result.toString();
+            changed = true;
           }
         }
-        if (!changed) break;
       }
-      return newValues;
+      if (!changed) break;
+    }
+    
+    return updatedValues;
+  }, [schema, evaluateRuleWithValues]);
+
+  // REAL-TIME: Шууд тооцоолол хийх, 2 аравтын оронтой хязгаарлах
+  const handleInputChange = useCallback((fieldId: string, displayValue: string) => {
+    if (isLocked) return;
+    
+    // Save the raw display value for showing while typing (without formatting)
+    tempInputValueRef.current[fieldId] = displayValue;
+    
+    // Parse and round to 2 decimal places immediately
+    let cleanValue = displayValue.replace(/[₮,]/g, "").trim();
+    cleanValue = cleanValue.replace(/[^0-9.-]/g, "");
+    
+    const dotCount = (cleanValue.match(/\./g) || []).length;
+    if (dotCount > 1) {
+      const firstDotIndex = cleanValue.indexOf(".");
+      cleanValue = cleanValue.substring(0, firstDotIndex + 1) + 
+                   cleanValue.substring(firstDotIndex + 1).replace(/\./g, "");
+    }
+    
+    let num = parseFloat(cleanValue);
+    let roundedStr = "";
+    
+    if (!isNaN(num)) {
+      const rounded = Math.round(num * 100) / 100;
+      roundedStr = rounded.toString();
+    } else {
+      roundedStr = "";
+    }
+    
+    setValues(prev => {
+      const newValues = { ...prev, [fieldId]: roundedStr };
+      
+      if (!schema || isRecalculatingRef.current) return newValues;
+      
+      isRecalculatingRef.current = true;
+      const updatedValues = recalculateWithValues(newValues);
+      isRecalculatingRef.current = false;
+      
+      return updatedValues;
     });
-  }, [schema, evaluateRule]);
+  }, [isLocked, schema, recalculateWithValues]);
 
   const handleFocus = useCallback((fieldId: string, field?: Field) => {
     if (isLocked || field?.isCalculated) return;
     inputFocusRef.current[fieldId] = true;
-    tempInputValueRef.current[fieldId] = "";
-  }, [isLocked]);
+    // Show the raw number without formatting when focused
+    const rawValue = values[fieldId];
+    if (rawValue && rawValue !== "") {
+      const num = parseFloat(rawValue);
+      if (!isNaN(num)) {
+        // Show as is (could be like "0.01")
+        tempInputValueRef.current[fieldId] = num.toString();
+      } else {
+        tempInputValueRef.current[fieldId] = "";
+      }
+    } else {
+      tempInputValueRef.current[fieldId] = "";
+    }
+  }, [isLocked, values]);
 
   const handleBlur = useCallback((fieldId: string) => {
     inputFocusRef.current[fieldId] = false;
+    
+    // On blur, ensure value is properly rounded to 2 decimal places
+    setValues(prev => {
+      const currentValue = prev[fieldId];
+      if (!currentValue || currentValue === "") return prev;
+      
+      const num = parseFloat(currentValue);
+      if (isNaN(num)) return prev;
+      
+      const rounded = Math.round(num * 100) / 100;
+      const roundedStr = rounded.toString();
+      
+      if (currentValue !== roundedStr) {
+        const newValues = { ...prev, [fieldId]: roundedStr };
+        if (schema && !isRecalculatingRef.current) {
+          isRecalculatingRef.current = true;
+          const updatedValues = recalculateWithValues(newValues);
+          isRecalculatingRef.current = false;
+          return updatedValues;
+        }
+        return newValues;
+      }
+      return prev;
+    });
+    
+    // Clear temp value after blur
     delete tempInputValueRef.current[fieldId];
-    setTimeout(() => recalculateAll(), 50);
-  }, [recalculateAll]);
-
-  const handleInputChange = useCallback((fieldId: string, displayValue: string) => {
-    if (isLocked) return;
-    tempInputValueRef.current[fieldId] = displayValue;
-    const cleanValue = parseInputValue(displayValue);
-    setValues(prev => ({ ...prev, [fieldId]: cleanValue }));
-    if (recalculateTimeoutRef.current) clearTimeout(recalculateTimeoutRef.current);
-    recalculateTimeoutRef.current = setTimeout(() => recalculateAll(), 100);
-  }, [isLocked, recalculateAll]);
+  }, [schema, recalculateWithValues]);
 
   const getDisplayValue = useCallback((fieldId: string): string => {
+    // When focused, show raw value from tempInputValueRef
     if (inputFocusRef.current[fieldId] && tempInputValueRef.current[fieldId] !== undefined) {
       return tempInputValueRef.current[fieldId];
     }
+    // When not focused, show formatted money with 2 decimal places
     const value = values[fieldId];
-    if (!value) return "0.00 ₮";
+    if (!value || value === "") return "0.00 ₮";
     const num = parseFloat(value);
-    return isNaN(num) ? "0.00 ₮" : formatAsMoney(num);
+    if (isNaN(num)) return "0.00 ₮";
+    return formatAsMoney(num);
   }, [values]);
 
   const resetValues = useCallback(() => {
@@ -214,9 +330,10 @@ export const useDynamicForm = ({
       }
     };
     resetFields(schema.sections.flatMap(s => s.fields));
-    setValues(newValues);
-    setTimeout(() => recalculateAll(), 0);
-  }, [schema, isLocked, recalculateAll]);
+    
+    const updatedValues = recalculateWithValues(newValues);
+    setValues(updatedValues);
+  }, [schema, isLocked, recalculateWithValues]);
 
   const clearAndLock = useCallback(() => {
     if (!schema) return;
@@ -228,13 +345,26 @@ export const useDynamicForm = ({
       }
     };
     collectAllFieldIds(schema.sections.flatMap(s => s.fields));
-    setValues(clearedValues);
+    
+    const updatedValues = recalculateWithValues(clearedValues);
+    setValues(updatedValues);
     setIsLocked(true);
-  }, [schema]);
+  }, [schema, recalculateWithValues]);
 
   const unlock = useCallback(() => {
     setIsLocked(false);
   }, []);
+
+  const recalculateAll = useCallback(() => {
+    if (!schema || isRecalculatingRef.current) return;
+    
+    isRecalculatingRef.current = true;
+    setValues(prev => {
+      const updated = recalculateWithValues(prev);
+      isRecalculatingRef.current = false;
+      return updated;
+    });
+  }, [schema, recalculateWithValues]);
 
   const buildReportData = useCallback(() => {
     if (!schema) return null;
@@ -266,77 +396,58 @@ export const useDynamicForm = ({
     };
   }, [schema, values]);
 
-  /**
-   * Extract values from report_data - Supports multiple formats:
-   * 1. Direct { "1": "0", "2": "0" } format
-   * 2. { sections: [...] } format (from deploy)
-   * 3. JSON string format
-   */
   const extractValuesFromReportData = useCallback((reportData: any): Record<string, string> => {
-    console.log("=== extractValuesFromReportData ===");
-    console.log("Input type:", typeof reportData);
-    console.log("Input:", reportData);
-    
-    if (!reportData) {
-      console.log("No report_data found");
-      return {};
-    }
+    if (!reportData) return {};
     
     const extractedValues: Record<string, string> = {};
     
-    // Case 1: Direct { "1": "0", "2": "0" } format (flat object)
+    const getNumberValue = (val: any): string => {
+      if (val === undefined || val === null) return "0";
+      if (typeof val === 'number') {
+        const rounded = Math.round(val * 100) / 100;
+        return rounded.toString();
+      }
+      if (typeof val === 'string') {
+        const num = parseBackendValue(val);
+        const rounded = Math.round(num * 100) / 100;
+        return rounded.toString();
+      }
+      return "0";
+    };
+    
     if (typeof reportData === "object" && !reportData.sections && !reportData.fields) {
-      console.log("Direct object mode detected");
       for (const [key, value] of Object.entries(reportData)) {
         if (typeof value === "string" || typeof value === "number") {
-          extractedValues[key] = String(value);
+          extractedValues[key] = getNumberValue(value);
         }
       }
-      console.log("Direct object mode - extracted keys:", Object.keys(extractedValues).length);
       return extractedValues;
     }
     
-    // Case 2: { sections: [...] } format (from deploy or local with nested structure)
     if (typeof reportData === "object" && reportData.sections) {
-      console.log("Sections mode detected");
-      console.log("Sections count:", reportData.sections.length);
-      
       const extractFromFields = (fields: any[]) => {
         for (const field of fields) {
           if (field.id) {
-            // Get value from field.result or field.value
             let rawValue = null;
             if (field.result !== undefined && field.result !== null) {
               rawValue = field.result;
             } else if (field.value !== undefined && field.value !== null) {
               rawValue = field.value;
             }
-            
             if (rawValue !== null) {
-              extractedValues[field.id] = parseBackendValue(rawValue).toString();
+              extractedValues[field.id] = getNumberValue(rawValue);
             }
           }
-          if (field.children && field.children.length > 0) {
-            extractFromFields(field.children);
-          }
+          if (field.children?.length) extractFromFields(field.children);
         }
       };
-      
       for (const section of reportData.sections) {
-        if (section.fields) {
-          extractFromFields(section.fields);
-        }
+        if (section.fields) extractFromFields(section.fields);
       }
-      
-      console.log("Sections mode - extracted keys:", Object.keys(extractedValues).length);
-      console.log("Sample extracted values:", Object.entries(extractedValues).slice(0, 5));
       return extractedValues;
     }
     
-    // Case 3: { fields: [...] } format (alternative)
     if (typeof reportData === "object" && reportData.fields) {
-      console.log("Fields mode detected");
-      
       const extractFromFields = (fields: any[]) => {
         for (const field of fields) {
           if (field.id) {
@@ -346,34 +457,26 @@ export const useDynamicForm = ({
             } else if (field.value !== undefined && field.value !== null) {
               rawValue = field.value;
             }
-            
             if (rawValue !== null) {
-              extractedValues[field.id] = parseBackendValue(rawValue).toString();
+              extractedValues[field.id] = getNumberValue(rawValue);
             }
           }
-          if (field.children && field.children.length > 0) {
-            extractFromFields(field.children);
-          }
+          if (field.children?.length) extractFromFields(field.children);
         }
       };
-      
       extractFromFields(reportData.fields);
-      console.log("Fields mode - extracted keys:", Object.keys(extractedValues).length);
       return extractedValues;
     }
     
-    // Case 4: JSON string
     if (typeof reportData === "string") {
       try {
         const parsed = JSON.parse(reportData);
-        console.log("Parsed JSON string - calling recursively");
         return extractValuesFromReportData(parsed);
       } catch (e) {
         console.error("JSON parse error:", e);
       }
     }
     
-    console.log("Unknown format - returning empty object");
     return extractedValues;
   }, []);
 
@@ -386,7 +489,6 @@ export const useDynamicForm = ({
     isLoading,
     error,
     loadSchema,
-    getValue,
     getDisplayValue,
     handleFocus,
     handleBlur,

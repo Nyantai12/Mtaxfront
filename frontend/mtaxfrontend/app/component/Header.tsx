@@ -210,35 +210,53 @@ export default function Header() {
   };
 
   // components/Header.tsx - handleLogout функцийг өөрчлөх
-const handleLogout = () => {
-  // 1. localStorage-с бүх өгөгдлийг устгах
-  localStorage.removeItem("user");
-  localStorage.removeItem("userRole");
-  localStorage.removeItem("userId");
-  localStorage.removeItem("token");
-  localStorage.removeItem("selectedOrganization");
-  localStorage.removeItem("userRole");
-  localStorage.removeItem("isAdmin");
-  
-  // 2. Session storage-с устгах (хэрэв байвал)
-  sessionStorage.clear();
-  
-  // 3. Хэрэглэгчийн state-г цэвэрлэх
-  setUser(null);
-  setOrganizations([]);
-  setSelectedOrg(null);
-  setIsMenuOpen(false);
-  
-  // 4. Auth change event dispatch хийх
-  window.dispatchEvent(new Event('auth-change'));
-  
-  // 5. Нүүр хуудас руу чиглүүлэх
-  router.push("/");
-  
-  // 6. Хуудасны кэшийг цэвэрлэх (hard refresh биш, soft navigation)
-  setTimeout(() => {
-    window.location.reload(); // Эсвэл router.refresh()
-  }, 100);
+// components/Header.tsx - handleLogout функцийг засах
+const handleLogout = async () => {
+  try {
+    // 1. Сервер талын logout API руу POST хүсэлт илгээх
+    const response = await fetch(`${API_BASE_URL}/api/auth/logout/`, {
+      method: "POST",
+      credentials: "include", // Cookie-г автоматаар илгээхэд чухал
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json();
+    console.log("Logout response:", data);
+    
+  } catch (error) {
+    console.error("Logout API error:", error);
+    // API алдаа гарсан ч localStorage-г цэвэрлээд үргэлжлүүлэх
+  } finally {
+    // 2. localStorage-с бүх өгөгдлийг устгах
+    localStorage.removeItem("user");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("token");
+    localStorage.removeItem("selectedOrganization");
+    localStorage.removeItem("isAdmin");
+    
+    // 3. Session storage-с устгах (хэрэв байвал)
+    sessionStorage.clear();
+    
+    // 4. Хэрэглэгчийн state-г цэвэрлэх
+    setUser(null);
+    setOrganizations([]);
+    setSelectedOrg(null);
+    setIsMenuOpen(false);
+    
+    // 5. Auth change event dispatch хийх
+    window.dispatchEvent(new Event('auth-change'));
+    
+    // 6. Нүүр хуудас руу чиглүүлэх
+    router.push("/");
+    
+    // 7. Хуудасны кэшийг цэвэрлэх
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
+  }
 };
 
   const getUserDisplayName = () => {

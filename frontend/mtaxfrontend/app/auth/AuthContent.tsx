@@ -11,6 +11,7 @@ import {
   FiAlertCircle,
   FiCheckCircle,
   FiXCircle,
+  FiHash,
 } from "react-icons/fi";
 import { FaGraduationCap } from "react-icons/fa";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -58,6 +59,7 @@ export default function AuthContent() {
     password: "",
     first_name: "",
     last_name: "",
+    student_code: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,6 +87,12 @@ export default function AuthContent() {
       return;
     }
 
+    if (!isLogin && !formData.student_code) {
+      setError("Оюутны кодыг оруулна уу");
+      setIsLoading(false);
+      return;
+    }
+
     const apiUrl = isLogin
       ? `${API_BASE_URL}/api/auth/login/`
       : `${API_BASE_URL}/api/auth/register/`;
@@ -99,6 +107,7 @@ export default function AuthContent() {
           password: formData.password,
           first_name: formData.first_name,
           last_name: formData.last_name,
+          student_code: formData.student_code.toUpperCase(),
         };
 
     try {
@@ -137,6 +146,7 @@ export default function AuthContent() {
             password: "",
             first_name: "",
             last_name: "",
+            student_code: "",
           });
           setIsLoading(false);
           return;
@@ -146,6 +156,10 @@ export default function AuthContent() {
           return;
         } else if (data.resultCode === 8013) {
           setError("Таны бүртгэл хаагдсан байна. Администратортой холбоо барина уу.");
+          setIsLoading(false);
+          return;
+        } else if (data.resultCode === 8014) {
+          setError("Энэ оюутны код аль хэдийн бүртгэлтэй байна.");
           setIsLoading(false);
           return;
         } else {
@@ -359,40 +373,63 @@ export default function AuthContent() {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 {!isLogin && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Овог</label>
+                        <div className="relative mt-2">
+                          <FiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            name="last_name"
+                            value={formData.last_name}
+                            onChange={handleInputChange}
+                            placeholder="Баттулга"
+                            className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
+                            disabled={isLoading}
+                            required={!isLogin}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700">Нэр</label>
+                        <div className="relative mt-2">
+                          <FiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                          <input
+                            type="text"
+                            name="first_name"
+                            value={formData.first_name}
+                            onChange={handleInputChange}
+                            placeholder="Мөнхжин"
+                            className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
+                            disabled={isLoading}
+                            required={!isLogin}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Оюутны код талбар - ШИНЭЭР НЭМСЭН */}
                     <div>
-                      <label className="text-sm font-medium text-gray-700">Овог</label>
+                      <label className="text-sm font-medium text-gray-700">Оюутны код</label>
                       <div className="relative mt-2">
-                        <FiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <FiHash className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                           type="text"
-                          name="last_name"
-                          value={formData.last_name}
+                          name="student_code"
+                          value={formData.student_code}
                           onChange={handleInputChange}
-                          placeholder="Баттулга"
+                          placeholder="SW22D001"
                           className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
                           disabled={isLoading}
                           required={!isLogin}
                         />
                       </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Сургуулийн оюутны код оруулна уу (жишээ: SW22D001)
+                      </p>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Нэр</label>
-                      <div className="relative mt-2">
-                        <FiUser className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                          type="text"
-                          name="first_name"
-                          value={formData.first_name}
-                          onChange={handleInputChange}
-                          placeholder="Мөнхжин"
-                          className="w-full pl-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-600 outline-none text-gray-600"
-                          disabled={isLoading}
-                          required={!isLogin}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  </>
                 )}
 
                 <div>

@@ -15,6 +15,7 @@ import {
   FiAlertCircle,
   FiChevronLeft,
   FiChevronRight,
+  FiHome,
 } from "react-icons/fi";
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import Link from "next/link";
@@ -38,9 +39,11 @@ interface Report {
   feedback?: string;
   report_data?: any;
   org_name?: string;
+  org_id?: number;
   first_name?: string;
   last_name?: string;
-  org_id?: number;
+  quarter?: number;
+  report_year?: number;
 }
 
 interface StudentInfo {
@@ -59,10 +62,22 @@ interface Pagination {
   totalItems: number;
 }
 
+const getQuarterLabel = (quarter: number) => {
+  const quarters = [
+    { value: 1, label: "1-р улирал", period: "1-3 сар" },
+    { value: 2, label: "2-р улирал", period: "4-6 сар" },
+    { value: 3, label: "3-р улирал", period: "7-9 сар" },
+    { value: 4, label: "4-р улирал", period: "10-12 сар" },
+  ];
+  const q = quarters.find(q => q.value === quarter);
+  return q ? q.label : `${quarter}-р улирал`;
+};
+
 export default function StudentMyReportsPage() {
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [filterStatus, setFilterStatus] = useState("all");
+  const [filterQuarter, setFilterQuarter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -74,6 +89,8 @@ export default function StudentMyReportsPage() {
     totalPages: 1,
     totalItems: 0,
   });
+
+  
 
   const mapStatus = (status: string): string => {
     switch(status) {
@@ -172,8 +189,11 @@ export default function StudentMyReportsPage() {
                 feedback: reportData.feedback,
                 report_data: reportData.report_data,
                 org_name: item.org_name,
+                org_id: item.org_id,
                 first_name: item.first_name,
                 last_name: item.last_name,
+                quarter: reportData.quarter || item.quarter || 1,
+                report_year: reportData.report_year || item.report_year || new Date().getFullYear(),
               };
             } else {
               const mappedStatus = mapStatus(item.current_status);
@@ -193,8 +213,11 @@ export default function StudentMyReportsPage() {
                 feedback: undefined,
                 report_data: undefined,
                 org_name: item.org_name,
+                org_id: item.org_id,
                 first_name: item.first_name,
                 last_name: item.last_name,
+                quarter: item.quarter || 1,
+                report_year: item.report_year || new Date().getFullYear(),
               };
             }
             
@@ -218,8 +241,11 @@ export default function StudentMyReportsPage() {
               feedback: undefined,
               report_data: undefined,
               org_name: item.org_name,
+              org_id: item.org_id,
               first_name: item.first_name,
               last_name: item.last_name,
+              quarter: item.quarter || 1,
+              report_year: item.report_year || new Date().getFullYear(),
             };
             reportsMap.set(reportId, report);
           }
@@ -298,6 +324,7 @@ export default function StudentMyReportsPage() {
   const getFilteredReports = () => {
     return reports.filter(report => {
       if (filterStatus !== "all" && report.status !== filterStatus) return false;
+      if (filterQuarter !== "all" && report.quarter !== parseInt(filterQuarter)) return false;
       if (searchQuery && 
           !report.report_name.toLowerCase().includes(searchQuery.toLowerCase()) && 
           !report.type_name.toLowerCase().includes(searchQuery.toLowerCase()) &&
@@ -324,7 +351,7 @@ export default function StudentMyReportsPage() {
       totalPages: Math.ceil(filteredReports.length / prev.itemsPerPage),
       currentPage: 1,
     }));
-  }, [filterStatus, searchQuery, reports.length]);
+  }, [filterStatus, filterQuarter, searchQuery, reports.length]);
 
   const goToPage = (page: number) => {
     if (page < 1 || page > pagination.totalPages) return;
@@ -338,6 +365,13 @@ export default function StudentMyReportsPage() {
     } else {
       router.push(`/student/reports/view/${reportId}`);
     }
+  };
+
+  const quarterCounts = {
+    1: reports.filter(r => r.quarter === 1).length,
+    2: reports.filter(r => r.quarter === 2).length,
+    3: reports.filter(r => r.quarter === 3).length,
+    4: reports.filter(r => r.quarter === 4).length,
   };
 
   const pendingCount = reports.filter(r => r.status === "pending").length;
@@ -385,6 +419,7 @@ export default function StudentMyReportsPage() {
           </div>
         )}
 
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -454,6 +489,9 @@ export default function StudentMyReportsPage() {
           </motion.div>
         </div>
 
+        
+
+        {/* Search and Filter */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200 mb-8">
           <div className="flex flex-wrap gap-4 items-center justify-between">
             <div className="flex-1 min-w-[300px]">
@@ -468,42 +506,45 @@ export default function StudentMyReportsPage() {
                 />
               </div>
             </div>
-            
-            <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={() => setFilterStatus("all")}
-                className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "all" ? "bg-[#0f172a] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Бүгд ({reports.length})
-              </button>
-              <button
-                onClick={() => setFilterStatus("pending")}
-                className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "pending" ? "bg-yellow-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Хүлээгдэж буй ({pendingCount})
-              </button>
-              <button
-                onClick={() => setFilterStatus("approved")}
-                className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "approved" ? "bg-green-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Баталгаажсан ({approvedCount})
-              </button>
-              <button
-                onClick={() => setFilterStatus("rejected")}
-                className={`px-4 py-2 rounded-xl font-medium transition ${
-                  filterStatus === "rejected" ? "bg-red-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Буцаасан ({rejectedCount})
-              </button>
-            </div>
           </div>
+          
+          {/* Status Filter Buttons */}
+          <div className="flex gap-2 flex-wrap mt-4">
+            <button
+              onClick={() => setFilterStatus("all")}
+              className={`px-4 py-2 rounded-xl font-medium transition ${
+                filterStatus === "all" ? "bg-[#0f172a] text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Бүгд ({reports.length})
+            </button>
+            <button
+              onClick={() => setFilterStatus("pending")}
+              className={`px-4 py-2 rounded-xl font-medium transition ${
+                filterStatus === "pending" ? "bg-yellow-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Хүлээгдэж буй ({pendingCount})
+            </button>
+            <button
+              onClick={() => setFilterStatus("approved")}
+              className={`px-4 py-2 rounded-xl font-medium transition ${
+                filterStatus === "approved" ? "bg-green-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Баталгаажсан ({approvedCount})
+            </button>
+            <button
+              onClick={() => setFilterStatus("rejected")}
+              className={`px-4 py-2 rounded-xl font-medium transition ${
+                filterStatus === "rejected" ? "bg-red-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              Буцаасан ({rejectedCount})
+            </button>
+          </div>
+          
+          
         </div>
 
         {filteredReports.length === 0 ? (
@@ -517,7 +558,7 @@ export default function StudentMyReportsPage() {
               Шинэ тайлан илгээхийн тулд доорх товчийг дарна уу.
             </p>
             <Link
-              href="/student/reports"
+              href="/student/select-organization"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium hover:opacity-90 transition"
             >
               <FiFileText />
@@ -542,8 +583,13 @@ export default function StudentMyReportsPage() {
                         {report.report_name}
                       </h3>
                       {report.org_name && (
-                        <p className="text-xs text-gray-400 mt-1">Компани : {report.org_name}</p>
+                        <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                          <FiHome className="text-xs" /> {report.org_name}
+                        </p>
                       )}
+                      <p className="text-xs text-purple-500 flex items-center gap-1 mt-1">
+                        <FiCalendar className="text-xs" /> {getQuarterLabel(report.quarter || 1)} / {report.report_year}
+                      </p>
                     </div>
                     {getStatusBadge(report.status, report.current_status)}
                   </div>
@@ -619,7 +665,7 @@ export default function StudentMyReportsPage() {
                           </button>
                         );
                       } else if (page === pagination.currentPage - 2 || page === pagination.currentPage + 2) {
-                        return <span key={page} className="w-10 h-10 flex items-center justify-center">...</span>;
+                        return <span key={page} className="w-10 h-10 flex items-center justify-center text-gray-400">...</span>;
                       }
                       return null;
                     }

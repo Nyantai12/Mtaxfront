@@ -61,6 +61,8 @@ interface ReportInfo {
   feedback?: string;
   reviewed_at?: string;
   teacher_name?: string;
+  quarter?: number;
+  report_year?: number;
 }
 
 // Render fields recursively from backend structure
@@ -119,6 +121,13 @@ export default function TeacherReportViewPage() {
   const [userInfo, setUserInfo] = useState<{ id: number; first_name: string; last_name: string; email: string; role: string } | null>(null);
   
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const quarters = [
+    { value: 1, label: "1-р улирал" },
+    { value: 2, label: "2-р улирал" },
+    { value: 3, label: "3-р улирал" },
+    { value: 4, label: "4-р улирал" },
+  ];
 
   useEffect(() => {
     const user = localStorage.getItem("user");
@@ -215,9 +224,8 @@ export default function TeacherReportViewPage() {
       console.log("=== Тайлангийн мэдээлэл ===");
       console.log("resultCode:", data.resultCode);
       console.log("data.data:", data.data);
-      console.log("report_data type:", typeof data.data?.report_data);
-      console.log("report_data:", data.data?.report_data);
-      console.log("sections:", data.data?.report_data?.sections);
+      console.log("quarter:", data.data?.quarter);
+      console.log("report_year:", data.data?.report_year);
 
       if (data.resultCode === 6140 && data.data) {
         const reportData = data.data;
@@ -272,6 +280,8 @@ export default function TeacherReportViewPage() {
           feedback: reportData.feedback,
           reviewed_at: reportData.checked_date,
           teacher_name: reportData.teacher_name,
+          quarter: reportData.quarter || 1,
+          report_year: reportData.report_year || new Date().getFullYear(),
         });
         
       } else {
@@ -303,6 +313,11 @@ export default function TeacherReportViewPage() {
       date: `${year} оны ${month}ын ${day}`,
       time: `${hours}:${minutes} минут`,
     };
+  };
+
+  const getQuarterLabel = (quarter: number) => {
+    const q = quarters.find(q => q.value === quarter);
+    return q ? q.label : `${quarter}-р улирал`;
   };
 
   const getStatusBadge = (current_status: string) => {
@@ -579,16 +594,14 @@ export default function TeacherReportViewPage() {
             </button>
           </div>
         </div>
+        
         {/* Simple text notification */}
-{(
-  <div className="mb-6 text-center text-sm text-gray-500">
-    <span className="inline-flex items-center gap-1">
-      
-      Та тайланг баталгаажуулах болон буцаах үйлдэл хийхийн тулд  "Буцах" товч дарна уу
-      <FiArrowRight className="text-sm" />
-    </span>
-  </div>
-)}
+        <div className="mb-6 text-center text-sm text-gray-500">
+          <span className="inline-flex items-center gap-1">
+            Та тайланг баталгаажуулах болон буцаах үйлдэл хийхийн тулд "Буцах" товч дарна уу
+            <FiArrowRight className="text-sm" />
+          </span>
+        </div>
 
         {/* Report Header */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-6">
@@ -606,7 +619,7 @@ export default function TeacherReportViewPage() {
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -634,6 +647,18 @@ export default function TeacherReportViewPage() {
                 ) : (
                   <p className="text-gray-500 text-sm">Мэдээлэл байхгүй</p>
                 )}
+              </div>
+              
+              {/* Улирлын мэдээлэл - Шинээр нэмсэн */}
+              <div className="bg-gray-50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                    <FiCalendar className="text-purple-600" />
+                  </div>
+                  <h3 className="font-semibold text-gray-900">Тайлангийн улирал</h3>
+                </div>
+                <p className="text-gray-800 font-medium">{getQuarterLabel(report.quarter || 1)}</p>
+                <p className="text-gray-500 text-sm mt-1">Тайлангийн жил: {report.report_year}</p>
               </div>
               
               <div className="bg-gray-50 rounded-xl p-4">
