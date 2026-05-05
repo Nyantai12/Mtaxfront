@@ -25,6 +25,8 @@ import {
 import { FaGraduationCap, FaChalkboardTeacher } from "react-icons/fa";
 import { API_BASE_URL } from "@/api_base_url/page";
 import { CgUserAdd } from "react-icons/cg";
+import { Staatliches } from "next/font/google";
+import { FcStatistics } from "react-icons/fc";
 interface UserData {
   id: number;
   email: string;
@@ -447,6 +449,7 @@ const handleLogout = async () => {
                   Оюутан бүртгэх
                 </Link>
                 
+                
               </>
             )}
             
@@ -585,6 +588,17 @@ const handleLogout = async () => {
                             >
                               <FiFileText className="text-gray-400" />
                               <span>Тайлангууд</span>
+                            </Link>
+                            <Link
+                              href="/admin/report-types"
+                              className={`px-4 py-2 rounded-lg transition font-medium flex items-center gap-2 ${
+                                isActive("/admin/report-types")
+                                  ? "text-purple-600 bg-purple-50"
+                                  : "text-gray-700 hover:text-purple-600 hover:bg-purple-50"
+                              }`}
+                            >
+                              <FcStatistics />
+                              Тайлангийн бүтэц 
                             </Link>
                           </>
                         ) : (
