@@ -77,31 +77,18 @@ export default function AdminDashboard() {
     {
       title: "Нийт оюутан",
       value: 0,
-      change: "+0",
+      change: "",
       icon: FiUsers,
       color: "bg-blue-500",
     },
     {
       title: "Нийт багш",
       value: 0,
-      change: "+0",
+      change: "",
       icon: FiAward,
       color: "bg-green-500",
     },
-    {
-      title: "Нийт тайлан",
-      value: 0,
-      change: "+0",
-      icon: FiFileText,
-      color: "bg-purple-500",
-    },
-    {
-      title: "Хүлээгдэж буй",
-      value: 0,
-      change: "+0",
-      icon: FiClock,
-      color: "bg-yellow-500",
-    },
+    
   ]);
   
   const [reportStatus, setReportStatus] = useState<ReportStatus[]>([
@@ -386,24 +373,11 @@ export default function AdminDashboard() {
             <p className="text-gray-600">Системийн ерөнхий мэдээлэл</p>
           </div>
           
-          <div className="flex gap-3">
-            <select 
-              className="px-4 py-2 border border-gray-200 rounded-xl bg-white"
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-            >
-              <option value="week">7 хоног</option>
-              <option value="month">Сар</option>
-              <option value="year">Жил</option>
-            </select>
-            <button className="px-4 py-2 bg-[#0f172a] text-white rounded-xl flex items-center gap-2">
-              <FiDownload /> Тайлан татах
-            </button>
-          </div>
+          
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
           {stats.map((stat, index) => (
             <motion.div
               key={index}
@@ -425,118 +399,48 @@ export default function AdminDashboard() {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Bar Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">7 хоногийн тайлангийн ирц</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={weeklyReports}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip 
-                  formatter={(value: any) => [`${value} тайлан`, 'Илгээсэн']}
-                  labelFormatter={(label) => `${label} гараг`}
-                />
-                <Legend />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Илгээсэн тайлан" />
-              </BarChart>
-            </ResponsiveContainer>
-            {weeklyReports.length > 0 && (
-              <div className="mt-4 text-center text-sm text-gray-500">
-                Нийт: {weeklyReports.reduce((sum, item) => sum + (item.count || 0), 0)} тайлан
-              </div>
-            )}
-          </div>
+        {/* Bar Chart - Голлуулсан */}
+<div className="flex justify-center items-center min-h-[400px] mb-8">
+  <div className="bg-white rounded-2xl p-8 shadow-xl border border-gray-100 w-full max-w-4xl">
+    <div className="text-center mb-6">
+      <h3 className="text-2xl font-bold text-gray-900">7 хоногийн тайлангийн ирц</h3>
+      <p className="text-gray-600 mt-2">Сүүлийн 7 хоногт ирсэн тайлангуудын тойм</p>
+    </div>
+    
+    <ResponsiveContainer width="100%" height={300}>
+      <BarChart data={weeklyReports}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="name" fontSize={14} />
+        <YAxis fontSize={14} />
+        <Tooltip 
+          formatter={(value: any) => [`${value} тайлан`, 'Илгээсэн']}
+          labelFormatter={(label) => `${label} гараг`}
+          contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e5e7eb', padding: '10px' }}
+        />
+        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+        <Bar 
+          dataKey="count" 
+          fill="#3b82f6" 
+          radius={[8, 8, 0, 0]} 
+          name="Илгээсэн тайлан"
+          label={{ position: 'top', fill: '#3b82f6', fontSize: 12 }}
+        />
+      </BarChart>
+    </ResponsiveContainer>
+    
+    {weeklyReports.length > 0 && (
+      <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+        <p className="text-gray-700">
+          <span className="font-bold text-2xl text-blue-600">
+            {weeklyReports.reduce((sum, item) => sum + (item.count || 0), 0)}
+          </span>
+          <span className="text-gray-500 ml-2">нийт тайлан</span>
+        </p>
+      </div>
+    )}
+  </div>
+</div>
 
-          {/* Pie Chart */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Тайлангийн төлөв</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={reportStatus}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }: { name?: string; percent?: number }) => `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {reportStatus.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: any) => [`${value} тайлан`, 'Тоо']} />
-              </PieChart>
-            </ResponsiveContainer>
-            {reportStatus.reduce((sum, item) => sum + item.value, 0) > 0 && (
-              <div className="mt-4 text-center text-sm text-gray-500">
-                Нийт: {reportStatus.reduce((sum, item) => sum + item.value, 0)} тайлан
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Tables */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top Students */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Шилдэг оюутнууд</h3>
-            <div className="space-y-3">
-              {topStudents.map((student, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 bg-[#0f172a] text-white rounded-lg flex items-center justify-center text-sm">
-                      {index + 1}
-                    </span>
-                    <div>
-                      <div className="font-medium text-gray-900">{student.name}</div>
-                      <div className="text-xs text-gray-500">{student.reports} тайлан</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-yellow-500">★</span>
-                    <span className="font-medium">{student.avgGrade}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Activities */}
-          <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Сүүлийн үйлдлүүд</h3>
-            <div className="space-y-3">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                      activity.type === 'submit' ? 'bg-blue-100 text-blue-600' :
-                      activity.type === 'approve' ? 'bg-green-100 text-green-600' :
-                      'bg-red-100 text-red-600'
-                    }`}>
-                      {activity.type === 'submit' ? <FiFileText /> :
-                       activity.type === 'approve' ? <FiCheckCircle /> :
-                       <FiAlertCircle />}
-                    </div>
-                    <div>
-                      <div className="text-sm">
-                        <span className="font-medium text-gray-900">{activity.user}</span>
-                        <span className="text-gray-600"> {activity.action}</span>
-                      </div>
-                      <div className="text-xs text-gray-500">{activity.time}</div>
-                    </div>
-                  </div>
-                  <button className="p-2 hover:bg-gray-200 rounded-lg transition">
-                    <FiMoreVertical className="text-gray-500" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

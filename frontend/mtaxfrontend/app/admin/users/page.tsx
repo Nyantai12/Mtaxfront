@@ -574,19 +574,9 @@ export default function AdminUsersPage() {
                                   <FiEdit2 />
                                 </button>
                               )}
-                              {/* Өөрийгөө биш, админ биш хэрэглэгчдийг устгах */}
-                              {user.id !== currentAdminId && normalizedRole !== "admin" && (
-                                <button
-                                  onClick={() => {
-                                    setSelectedUser(user);
-                                    setIsDeleteModalOpen(true);
-                                  }}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                  title="Устгах"
-                                >
-                                  <FiTrash2 />
-                                </button>
-                              )}
+                       
+                              
+                            
                             </div>
                           </td>
                         </motion.tr>
@@ -691,43 +681,6 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {isDeleteModalOpen && selectedUser && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
-          >
-            <h3 className="text-2xl font-bold text-gray-900 mb-4">
-              Хэрэглэгч устгах
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Та {selectedUser.last_name} {selectedUser.first_name} ({selectedUser.email}) хэрэглэгчийг устгахдаа итгэлтэй байна уу?<br />
-              Энэ үйлдлийг буцаах боломжгүй.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setIsDeleteModalOpen(false);
-                  setSelectedUser(null);
-                }}
-                className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-              >
-                Цуцлах
-              </button>
-              <button
-                onClick={handleDeleteUser}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
-              >
-                Устгах
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }
