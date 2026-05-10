@@ -42,6 +42,8 @@ export default function SelectOrganizationPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [duplicateError, setDuplicateError] = useState("");
+  const [isDuplicate, setIsDuplicate] = useState(false);
   
   // Хуудаслалтын state-ууд
   const [currentPage, setCurrentPage] = useState(1);
@@ -130,6 +132,10 @@ export default function SelectOrganizationPage() {
       if (data.resultCode === 7220) {
         setOrganizations(data.data || []);
         setCurrentPage(1); // Шинэ өгөгдөл ирэхэд эхний хуудас руу буцах
+        // Дахин давхардсан эсэхийг шалгах
+        if (newOrgName.trim()) {
+          checkDuplicateInRealTime(newOrgName);
+        }
       } else if (data.resultCode === 8213) {
         if (!isRetry) {
           console.log("Token expired, attempting refresh...");
@@ -163,15 +169,74 @@ export default function SelectOrganizationPage() {
     }
   };
 
+  // Давхардсан нэрийг шалгах функц
+  const checkDuplicateInRealTime = (name: string) => {
+    if (!name.trim()) {
+      setDuplicateError("");
+      setIsDuplicate(false);
+      return;
+    }
+
+    const isNameDuplicate = organizations.some(
+      (org) => org.org_name.toLowerCase() === name.trim().toLowerCase()
+    );
+
+    if (isNameDuplicate) {
+      setDuplicateError(`"${name}" нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.`);
+      setIsDuplicate(true);
+    } else {
+      setDuplicateError("");
+      setIsDuplicate(false);
+    }
+  };
+
+  // Нэрийг өөрчлөх үед шалгах
+  const handleOrgNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setNewOrgName(value);
+    
+    // Бодит цагийн давхардсан шалгалт
+    if (value.trim()) {
+      const isNameDuplicate = organizations.some(
+        (org) => org.org_name.toLowerCase() === value.trim().toLowerCase()
+      );
+      
+      if (isNameDuplicate) {
+        setDuplicateError(`"${value}" нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.`);
+        setIsDuplicate(true);
+      } else {
+        setDuplicateError("");
+        setIsDuplicate(false);
+      }
+    } else {
+      setDuplicateError("");
+      setIsDuplicate(false);
+    }
+  };
+
   const handleCreateOrganization = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Нэрийг шалгах
     if (!newOrgName.trim()) {
       setError("Байгууллагын нэр оруулна уу");
       return;
     }
 
+    // Давхардсан эсэхийг дахин шалгах
+    const isNameDuplicate = organizations.some(
+      (org) => org.org_name.toLowerCase() === newOrgName.trim().toLowerCase()
+    );
+
+    if (isNameDuplicate) {
+      setError(`"${newOrgName}" нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.`);
+      setIsDuplicate(true);
+      return;
+    }
+
     setIsCreating(true);
     setError("");
+    setDuplicateError("");
     
     try {
       const response = await fetch(`${API_BASE_URL}/api/organization/addorganization/`, {
@@ -180,7 +245,7 @@ export default function SelectOrganizationPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ org_name: newOrgName }),
+        body: JSON.stringify({ org_name: newOrgName.trim() }),
       });
 
       const responseText = await response.text();
@@ -197,6 +262,8 @@ export default function SelectOrganizationPage() {
         setSuccess("Байгууллага амжилттай үүсгэгдлээ");
         setNewOrgName("");
         setShowCreateForm(false);
+        setDuplicateError("");
+        setIsDuplicate(false);
         await fetchOrganizations();
         setTimeout(() => setSuccess(""), 3000);
       } else if (data.resultCode === 8213) {
@@ -212,6 +279,10 @@ export default function SelectOrganizationPage() {
             router.push("/auth");
           }, 2000);
         }
+      } else if (data.resultCode === 7321) {
+        // Серверээс давхардсан нэрийн алдаа
+        setError(data.resultMessage || "Энэ нэртэй байгууллага аль хэдийн бүртгэгдсэн байна.");
+        setIsDuplicate(true);
       } else {
         setError(data.resultMessage || "Алдаа гарлаа");
       }
@@ -233,7 +304,7 @@ export default function SelectOrganizationPage() {
     router.push(`/student/reports/new?org_id=${orgId}`);
   };
 
-  // Хайлт хийсэн үр дүнг шүүх
+  // Хуудасны хайлт
   const filteredOrganizations = organizations.filter(org =>
     org.org_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -369,13 +440,19 @@ export default function SelectOrganizationPage() {
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setCurrentPage(1); // Хайлт хийхэд эхний хуудас руу буцах
+                setCurrentPage(1);
               }}
               className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-black"
             />
           </div>
           <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
+            onClick={() => {
+              setShowCreateForm(!showCreateForm);
+              setDuplicateError("");
+              setIsDuplicate(false);
+              setNewOrgName("");
+              setError("");
+            }}
             className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50"
             disabled={isCreating}
           >
@@ -400,29 +477,103 @@ export default function SelectOrganizationPage() {
                 <input
                   type="text"
                   value={newOrgName}
-                  onChange={(e) => setNewOrgName(e.target.value)}
+                  onChange={handleOrgNameChange}
                   placeholder="Жишээ: Мандах ХХК, Глобал Солюшнс ..."
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-black"
+                  className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-black transition ${
+                    duplicateError 
+                      ? "border-red-500 bg-red-50" 
+                      : newOrgName && !isDuplicate && newOrgName.trim()
+                      ? "border-green-500 bg-green-50"
+                      : "border-gray-200"
+                  }`}
                   disabled={isCreating}
+                  autoComplete="off"
                 />
+                
+                {/* Давхардсан нэрийн warning мессеж */}
+                {duplicateError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-2 flex items-center gap-2 text-red-600 text-sm"
+                  >
+                    <FiAlertCircle className="text-red-500" />
+                    <span>{duplicateError}</span>
+                  </motion.div>
+                )}
+                
+                {/* Боломжтой нэрийн амжилттай мессеж */}
+                {!duplicateError && newOrgName && newOrgName.trim() && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-2 flex items-center gap-2 text-green-600 text-sm"
+                  >
+                    <FiCheckCircle className="text-green-500" />
+                    <span>Энэ нэр ашиглах боломжтой</span>
+                  </motion.div>
+                )}
+                
+                {/* Тайлбар текст */}
+                <p className="mt-2 text-xs text-gray-500">
+                  Байгууллагын нэр давхардаж болохгүй. Жижиг том үсэг ялгахгүйгээр шалгана.
+                </p>
               </div>
+              
               <div className="flex gap-3">
                 <button
                   type="submit"
-                  disabled={isCreating}
-                  className="px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg hover:opacity-90 transition disabled:opacity-50"
+                  disabled={isCreating || isDuplicate || !newOrgName.trim()}
+                  className={`px-6 py-3 bg-gradient-to-r from-[#0f172a] to-[#1e3a8a] text-white rounded-xl font-medium shadow-lg transition flex items-center gap-2 ${
+                    isCreating || isDuplicate || !newOrgName.trim()
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:opacity-90"
+                  }`}
                 >
-                  {isCreating ? "Үүсгэж байна..." : "Байгууллага үүсгэх"}
+                  {isCreating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Үүсгэж байна...
+                    </>
+                  ) : (
+                    <>
+                      <FiPlus />
+                      Байгууллага үүсгэх
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCreateForm(false)}
+                  onClick={() => {
+                    setShowCreateForm(false);
+                    setDuplicateError("");
+                    setIsDuplicate(false);
+                    setNewOrgName("");
+                    setError("");
+                  }}
                   className="px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
                   disabled={isCreating}
                 >
                   Болих
                 </button>
               </div>
+              
+              {/* Давхардсан нэрийн талаарх мэдээлэл */}
+              {organizations.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-800 mb-2">📋 Бүртгэлтэй байгууллагууд:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {organizations.slice(0, 5).map((org) => (
+                      <span key={org.org_id} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {org.org_name}
+                      </span>
+                    ))}
+                    {organizations.length > 5 && (
+                      <span className="text-xs text-blue-600">+{organizations.length - 5} бусад</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </form>
           </motion.div>
         )}

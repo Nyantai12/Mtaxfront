@@ -133,16 +133,7 @@ const mapEnglishStatusToMongolian = (englishStatus: string): string => {
   }
 };
 
-const getQuarterLabel = (quarter: number) => {
-  const quarters = [
-    { value: 1, label: "1-р улирал" },
-    { value: 2, label: "2-р улирал" },
-    { value: 3, label: "3-р улирал" },
-    { value: 4, label: "4-р улирал" },
-  ];
-  const q = quarters.find(q => q.value === quarter);
-  return q ? q.label : `${quarter}-р улирал`;
-};
+
 
 export default function TeacherReviewsClient() {
   const router = useRouter();
@@ -623,14 +614,13 @@ export default function TeacherReviewsClient() {
   };
 
   const exportToCSV = () => {
-    const headers = ["ID", "Тайлан", "Оюутан", "Имэйл", "Байгууллага", "Улирал", "Төлөв", "Илгээсэн огноо"];
+    const headers = ["ID", "Тайлан", "Оюутан", "Имэйл", "Байгууллага", "Төлөв", "Илгээсэн огноо"];
     const csvData = filteredReports.map(report => [
       report.id,
       report.title,
       report.student_name,
       report.student_email,
       report.org_name || "",
-      getQuarterLabel(report.quarter || 1),
       report.report_status,
       formatDate(report.submitted_at),
     ]);
@@ -967,9 +957,7 @@ export default function TeacherReviewsClient() {
                             </p>
                           )}
                           {/* Quarter info */}
-                          <p className="text-xs text-purple-500 flex items-center gap-1 mt-1">
-                            <FiCalendar className="text-xs" /> {getQuarterLabel(report.quarter || 1)} / {report.report_year}
-                          </p>
+                          
                         </div>
                         <div className="ml-2 flex-shrink-0 text-right">
                           {getStatusBadge(report.report_status)}
@@ -1081,10 +1069,7 @@ export default function TeacherReviewsClient() {
                           <FiHome /> Байгууллага: {selectedReport.org_name}
                         </span>
                       )}
-                      {/* Quarter info */}
-                      <span className="flex items-center gap-1">
-                        <FiCalendar /> Тайлангийн улирал: {getQuarterLabel(selectedReport.quarter || 1)} / {selectedReport.report_year}
-                      </span>
+                      
                     </div>
                   </div>
                   {getStatusBadge(selectedReport.report_status)}

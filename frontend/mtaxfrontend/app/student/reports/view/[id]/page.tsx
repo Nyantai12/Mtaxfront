@@ -95,12 +95,7 @@ export default function DynamicReportPage() {
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
   const reportIdRef = useRef<number | undefined>(undefined);
 
-  const quarters = [
-    { value: 1, label: "1-р улирал" },
-    { value: 2, label: "2-р улирал" },
-    { value: 3, label: "3-р улирал" },
-    { value: 4, label: "4-р улирал" },
-  ];
+  
 
   const formHook = useDynamicForm({
     reportTypeId: reportTypeId,
@@ -456,88 +451,7 @@ export default function DynamicReportPage() {
     }
   };
 
-  const QuarterSelector = () => {
-    // Хэрэв тайлан хүлээгдэж буй эсвэл баталгаажсан бол зөвхөн текст харуулах
-    const showFullSelector = currentStatus === "Илгээгээгүй" || currentStatus === "Буцаасан" || isClearedAndLocked;
-    
-    if (!showFullSelector) {
-      // Хүлээгдэж буй эсвэл Баталгаажсан үед жижиг текст харуулах
-      return (
-        <div className="mb-6 bg-gray-50 rounded-xl border border-gray-200 p-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <FiCalendar className="text-gray-500 text-sm" />
-              <span className="text-sm text-gray-600">Тайлангийн улирал:</span>
-              <span className="text-sm font-medium text-gray-800">{selectedQuarter}-р улирал</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Тайлангийн жил:</span>
-              <span className="text-sm font-medium text-gray-800">{reportYear}</span>
-            </div>
-            {isClearedAndLocked && (
-              <div className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
-                X тайлан
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    // Илгээгээгүй эсвэл Буцаасан үед бүрэн сонголт харуулах
-    return (
-      <div className="mb-6 bg-white rounded-2xl shadow-lg border border-gray-200 p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-            <FiCalendar className="text-purple-600" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">Тайлангийн улирал</h3>
-            <p className="text-sm text-gray-500">Тайлангаа аль улиралд илгээж байгаа сонгоно уу</p>
-          </div>
-          {isClearedAndLocked && (
-            <div className="ml-auto px-3 py-1.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium flex items-center gap-1">
-              <FiXCircle className="text-orange-600 text-sm" />
-              X тайлан
-            </div>
-          )}
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {quarters.map((q) => (
-            <button
-              key={q.value}
-              onClick={() => handleQuarterChange(q.value)}
-              disabled={isReportLocked()}
-              className={`py-2 px-3 rounded-xl border-2 transition flex flex-col items-center gap-1 ${
-                selectedQuarter === q.value
-                  ? "border-blue-500 bg-blue-50 text-blue-700"
-                  : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
-              } ${isReportLocked() ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-            >
-              <span className={`text-sm font-medium ${selectedQuarter === q.value ? "text-blue-600" : "text-gray-600"}`}>
-                {q.label}
-              </span>
-              {selectedQuarter === q.value && (
-                <FiCheckCircle className="text-blue-600 text-xs" />
-              )}
-            </button>
-          ))}
-        </div>
-        
-        <div className="mt-4 pt-3 border-t border-gray-100">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">
-              Сонгосон улирал: <strong className="text-gray-700">{selectedQuarter}-р улирал</strong>
-            </span>
-            <span className="text-sm text-gray-500">
-              Тайлангийн жил: <strong className="text-gray-700">{reportYear}</strong>
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  
 
   const CommentsSection = () => {
     const currentUserId = userInfo?.id;
@@ -598,31 +512,7 @@ export default function DynamicReportPage() {
             </div>
           </div>
           
-          {teacherFeedback && teacherFeedback.comment_text && (
-            <div className="bg-orange-50 rounded-xl p-4 border border-orange-200">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <FaChalkboardTeacher className="text-white text-lg" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-                    <span className="font-semibold text-gray-800">
-                      {teacherName || "Багш"} 
-                      <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Хянасан багш</span>
-                    </span>
-                    {teacherFeedback.created_at && (
-                      <span className="text-xs text-gray-500">
-                        {new Date(teacherFeedback.created_at).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="bg-white rounded-lg p-3 mt-2">
-                    <p className="text-gray-700 whitespace-pre-wrap">{teacherFeedback.comment_text}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          
           
           {regularComments.length > 0 && (
             <div className="space-y-3">
@@ -1022,7 +912,7 @@ export default function DynamicReportPage() {
           </div>
         )}
 
-        <QuarterSelector />
+        
 
         {statusInfo && (
           <div className={`mb-6 p-4 ${statusInfo.color} rounded-xl border flex items-center gap-3`}>

@@ -62,16 +62,7 @@ interface Pagination {
   totalItems: number;
 }
 
-const getQuarterLabel = (quarter: number) => {
-  const quarters = [
-    { value: 1, label: "1-р улирал", period: "1-3 сар" },
-    { value: 2, label: "2-р улирал", period: "4-6 сар" },
-    { value: 3, label: "3-р улирал", period: "7-9 сар" },
-    { value: 4, label: "4-р улирал", period: "10-12 сар" },
-  ];
-  const q = quarters.find(q => q.value === quarter);
-  return q ? q.label : `${quarter}-р улирал`;
-};
+
 
 export default function StudentMyReportsPage() {
   const router = useRouter();
@@ -587,9 +578,7 @@ export default function StudentMyReportsPage() {
                           <FiHome className="text-xs" /> {report.org_name}
                         </p>
                       )}
-                      <p className="text-xs text-purple-500 flex items-center gap-1 mt-1">
-                        <FiCalendar className="text-xs" /> {getQuarterLabel(report.quarter || 1)} / {report.report_year}
-                      </p>
+                      
                     </div>
                     {getStatusBadge(report.status, report.current_status)}
                   </div>

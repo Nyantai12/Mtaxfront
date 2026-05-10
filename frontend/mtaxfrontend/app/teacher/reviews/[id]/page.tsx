@@ -619,7 +619,7 @@ export default function TeacherReportViewPage() {
           </div>
 
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols- lg:grid-cols-4 gap-6">
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -649,17 +649,7 @@ export default function TeacherReportViewPage() {
                 )}
               </div>
               
-              {/* Улирлын мэдээлэл - Шинээр нэмсэн */}
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                    <FiCalendar className="text-purple-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900">Тайлангийн улирал</h3>
-                </div>
-                <p className="text-gray-800 font-medium">{getQuarterLabel(report.quarter || 1)}</p>
-                <p className="text-gray-500 text-sm mt-1">Тайлангийн жил: {report.report_year}</p>
-              </div>
+              
               
               <div className="bg-gray-50 rounded-xl p-4">
                 <div className="flex items-center gap-3 mb-3">
